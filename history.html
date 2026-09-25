@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#07101d" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Precise 15</title>
+<style>
+:root{
+  --bg:#07101d;--panel:#0d1727;--panel2:#111e31;--border:#23334b;--text:#e9f0fb;--muted:#93a4bc;
+  --bluebg:#152640;--bluebd:#3d6598;--greenbg:#10261e;--greenbd:#2e6d52;--amberbg:#2c2511;--amberbd:#796329;
+  --redbg:#2d171b;--redbd:#7c3440;--accent:#78aaff;--good:#77d6a7;--warn:#ffd36d;--bad:#ff8292;--info:#91b9ff;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;padding-top:54px;padding-bottom:24px;background:linear-gradient(180deg,#06101c 0%,var(--bg) 60%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px;line-height:1.45}
+.wrap{max-width:1800px;margin:0 auto;padding:14px 18px 18px}
+.card{background:rgba(13,23,39,.96);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;min-width:0}
+.controls{display:flex;gap:10px;align-items:center;min-width:0}
+.actionRow{display:flex;flex-wrap:nowrap;gap:8px;align-items:center;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding-bottom:1px;flex:0 0 auto}
+button,.fileLabel{min-height:42px;border:1px solid var(--border);border-radius:10px;background:#18273d;color:var(--text);font-weight:700;cursor:pointer;touch-action:manipulation}
+button.primary{background:#2859a0;border-color:#3f75c1}
+button.danger{background:#412129;border-color:#753845;color:var(--bad)}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=file]{display:none}
+.iconBtn,.fileLabel.iconBtn{width:42px;height:42px;min-width:42px;min-height:42px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.iconBtn svg,.fileLabel.iconBtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.iconBtn:hover,.fileLabel.iconBtn:hover{background:#203654;border-color:var(--accent)}
+.iconBtn.primary:hover{background:#3269b5}
+.iconBtn.danger:hover{background:#512731}
+.srOnly{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.search{margin-left:auto;min-width:220px;max-width:420px;flex:1 1 320px;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);color:var(--text);padding:10px 12px;font:inherit;min-height:42px;outline:none}
+.search::placeholder{color:#7f91aa}.search:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(120,170,255,.12)}
+.progress{height:10px;background:#111b2b;border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-top:11px}.bar{height:100%;width:0;background:linear-gradient(90deg,#517fca,#76aafc);transition:width .2s ease}
+.status{margin-top:9px;border:1px solid var(--border);background:var(--panel2);border-radius:10px;padding:9px 10px;color:var(--muted);white-space:pre-wrap;font-size:12px}.status.good{color:var(--good)}.status.warn{color:var(--warn)}.status.bad{color:var(--bad)}
+.note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:9px}.small{font-size:11px;color:var(--muted);display:block}.errorRow{color:var(--bad)}
+.tableToolbar{display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px}
+.fullscreenBtn{width:38px;height:38px;min-width:38px;min-height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:21px;line-height:1;border-radius:9px;background:#18273d;border-color:#35577f}
+.fullscreenBtn:hover{border-color:var(--accent);background:#203654}
+.tableWrap{overflow:auto;border:1px solid var(--border);border-radius:11px;max-height:calc(100vh - 245px);-webkit-overflow-scrolling:touch}
+table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:var(--panel);font-size:11px}
+th,td{padding:6px 8px;border-right:1px solid #1a293f;border-bottom:1px solid #1a293f;vertical-align:middle;white-space:nowrap;line-height:1.2}
+th{position:sticky;top:0;z-index:2;background:#101d30;text-align:left;color:#b8c9df;cursor:pointer;user-select:none;font-size:11px;font-weight:750}
+th.sortActive{background:#173154;color:#dceaff}.sortMark{margin-left:4px;font-size:9px;font-weight:800;color:var(--accent)}
+th:last-child,td:last-child{border-right:0}tr:last-child td{border-bottom:0}tbody tr:hover{background:#101c2c}
+td.num{text-align:right;font-variant-numeric:tabular-nums}.coin{font-weight:800;color:#dceaff}.comment{white-space:normal;min-width:480px;max-width:720px;line-height:1.28}.coinType,.marketTag{font-weight:700}
+.ysTrue{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;font-weight:900;color:var(--good);background:var(--greenbg);border:1px solid var(--greenbd);font-size:13px}.ysFalse{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;font-weight:900;color:var(--bad);background:var(--redbg);border:1px solid var(--redbd);font-size:12px}
+.pill{display:inline-block;border-radius:999px;padding:4px 7px;font-size:10px;line-height:1.2;font-weight:800;border:1px solid var(--border)}.pill.low{color:var(--good);background:var(--greenbg);border-color:var(--greenbd)}.pill.normal{color:var(--muted);background:#111b2b;border-color:var(--border)}.pill.high{color:var(--warn);background:var(--amberbg);border-color:var(--amberbd)}.pill.veryhigh{color:var(--bad);background:var(--redbg);border-color:var(--redbd)}
+.empty{text-align:center;color:var(--muted);padding:28px!important}
+.historySection:fullscreen{width:100vw;height:100vh;max-width:none;margin:0;padding:10px;border:0;border-radius:0;background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+.historySection:fullscreen::backdrop{background:#07101d}.historySection:fullscreen .tableToolbar{flex:0 0 auto}.historySection:fullscreen .historyFullscreenTableWrap{flex:1 1 auto;max-height:none;height:auto;min-height:0;border-radius:8px}.historySection:fullscreen #historyTable{min-width:100%}
+/* Mobile-style application chrome */
+.appTopBar{position:fixed;top:0;left:0;right:0;height:54px;z-index:5000;display:flex;align-items:center;justify-content:center;background:rgba(7,16,29,.97);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding-top:env(safe-area-inset-top)}
+.appTopBarTitle{position:absolute;left:max(64px,calc(env(safe-area-inset-left) + 64px));top:50%;transform:translateY(-50%);font-size:15px;font-weight:800;letter-spacing:.25px;color:var(--text);pointer-events:none;text-align:left}.appMenuToggle{position:fixed;opacity:0;pointer-events:none}
+.appMenuButton{position:absolute;left:max(12px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:40px;height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;background:transparent;cursor:pointer;z-index:5002}
+.appMenuButton:hover{background:#132238}.appMenuButton span{display:block;width:22px;height:2px;border-radius:999px;background:var(--text);transition:transform .2s ease,opacity .2s ease}.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(1){transform:translateY(7px) rotate(45deg)}.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(2){opacity:0}.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.appMenuBackdrop{position:fixed;inset:54px 0 24px 0;z-index:4997;background:rgba(0,0,0,.46);opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s ease;cursor:pointer}.appSideMenu{position:fixed;top:54px;left:0;bottom:24px;width:min(290px,82vw);z-index:4998;background:#0b1524;border-right:1px solid var(--border);box-shadow:18px 0 45px rgba(0,0,0,.38);padding:14px 12px;transform:translateX(-102%);transition:transform .22s ease;overflow:auto}.appMenuToggle:checked ~ .appMenuBackdrop{opacity:1;visibility:visible}.appMenuToggle:checked ~ .appSideMenu{transform:translateX(0)}
+.appSideMenuTitle{padding:5px 8px 12px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.appNav{display:grid;gap:8px}.appNavLink{display:flex;align-items:center;min-height:48px;padding:0 14px;border:1px solid var(--border);border-radius:11px;background:#111e31;color:var(--text);font-size:14px;font-weight:800;text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}.appNavLink:hover{background:#182b46;border-color:#35577f}.appNavLink:active{transform:scale(.99)}.appNavLink.active{background:#173154;border-color:#3f75c1;color:#dceaff}
+.appBottomBar{position:fixed;left:0;right:0;bottom:0;z-index:5000;height:24px;display:flex;align-items:center;justify-content:center;padding:0 max(8px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px,env(safe-area-inset-left));background:rgba(7,16,29,.97);border-top:1px solid var(--border);color:#7f91aa;font-size:9px;line-height:1;letter-spacing:.02em;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+@media(max-width:900px){.wrap{padding:10px}.controls{align-items:stretch;flex-direction:column}.actionRow{width:100%;max-width:100%;padding-bottom:4px}.search{width:100%;max-width:none;min-width:0;margin-left:0;flex:0 0 auto}.tableWrap{max-height:calc(100vh - 270px)}.comment{min-width:340px;max-width:520px}}
+@media(max-width:600px){body{padding-top:54px;padding-bottom:24px}.wrap{padding:8px}.card{padding:10px;border-radius:12px}.actionRow{gap:6px}.iconBtn,.fileLabel.iconBtn{width:40px;height:40px;min-width:40px;min-height:40px}.tableWrap{max-height:calc(100vh - 250px);border-radius:9px}th,td{padding:6px 7px;font-size:10px}.fullscreenBtn{width:36px;height:36px;min-width:36px;font-size:20px}.historySection:fullscreen{padding:7px}.appSideMenu{width:min(280px,84vw)}}
+
+/* Shared local access gate */
+body.authLocked{overflow:hidden}
+body.authLocked .wrap,
+body.authLocked .app{visibility:hidden;pointer-events:none;user-select:none}
+.authGate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,9,17,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.authGate[hidden]{display:none!important}
+.authBox{width:min(420px,100%);background:#0d1727;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+.authBox h2{margin:0 0 6px;font-size:20px}
+.authBox p{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.45}
+.authBox label{display:block;margin:10px 0 5px;color:#b8c6d8;font-size:11px}
+.authBox input{width:100%;min-height:44px;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);color:var(--text);padding:11px 12px;font-size:16px;outline:none}
+.authBox input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(120,170,255,.12)}
+.authActions{margin-top:16px}
+.authActions button{width:100%;background:#2859a0;border-color:#3f75c1}
+.authActions button:hover{background:#3269b5}
+.authError{min-height:18px;margin-top:10px;color:var(--bad);font-size:12px}
+</style>
+</head>
+<body class="authLocked">
+<input id="appMenuToggle" class="appMenuToggle" type="checkbox" aria-hidden="true">
+<header class="appTopBar" aria-label="Application navigation">
+  <label for="appMenuToggle" class="appMenuButton" role="button" aria-label="Open menu" title="Menu"><span></span><span></span><span></span></label>
+  <div class="appTopBarTitle">Precise 15 — History</div>
+</header>
+<label for="appMenuToggle" class="appMenuBackdrop" aria-hidden="true"></label>
+<aside class="appSideMenu" aria-label="Main menu">
+  <div class="appSideMenuTitle">Menu</div>
+  <nav class="appNav">
+    <a class="appNavLink" href="index.html" target="_blank" rel="noopener">Finder</a>
+    <a class="appNavLink active" href="javascript:void(0);" onclick="window.location.reload();">History</a>
+    <a class="appNavLink" href="analysis.html" target="_blank" rel="noopener">Analysis</a>
+  </nav>
+</aside>
+
+<div id="authGate" class="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <form id="authForm" class="authBox" autocomplete="off">
+    <h2 id="authTitle">Giriş</h2>
+    <p>Devam etmek için kullanıcı adı ve şifre girin.</p>
+    <label for="authUser">Kullanıcı Adı</label>
+    <input id="authUser" type="text" autocomplete="username" required autofocus>
+    <label for="authPass">Şifre</label>
+    <input id="authPass" type="password" autocomplete="current-password" required>
+    <div class="authActions"><button type="submit">Giriş Yap</button></div>
+    <div id="authError" class="authError" aria-live="polite"></div>
+  </form>
+</div>
+
+<div class="wrap">
+
+  <section class="card">
+    <div class="controls">
+      <div class="actionRow" aria-label="History actions">
+        <button id="buildBtn" class="primary iconBtn" type="button" title="History Oluştur / Güncelle" aria-label="History Oluştur / Güncelle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/></svg><span class="srOnly">History Oluştur / Güncelle</span></button>
+        <button id="stopBtn" class="iconBtn" type="button" disabled title="Durdur" aria-label="Durdur"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg><span class="srOnly">Durdur</span></button>
+        <button id="saveBtn" class="iconBtn" type="button" disabled title="JSON Kaydet" aria-label="JSON Kaydet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span class="srOnly">JSON Kaydet</span></button>
+        <label class="fileLabel iconBtn" for="loadFile" title="JSON Yükle" aria-label="JSON Yükle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/></svg><span class="srOnly">JSON Yükle</span></label>
+        <input id="loadFile" type="file" accept="application/json,.json" />
+        <button id="clearBtn" class="danger iconBtn" type="button" title="Yerel Veriyi Temizle" aria-label="Yerel Veriyi Temizle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></svg><span class="srOnly">Yerel Veriyi Temizle</span></button>
+        <button id="sortResetBtn" class="iconBtn" type="button" title="Sıralamayı Sıfırla" aria-label="Sıralamayı Sıfırla"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16"/><path d="m4 8 4-4 4 4"/><path d="M16 20V4"/><path d="m12 16 4 4 4-4"/></svg><span class="srOnly">Sıralamayı Sıfırla</span></button>
+      </div>
+      <input id="searchInput" class="search" placeholder="Coin ara: BTC, ETH, WIF..." autocomplete="off" />
+    </div>
+    <div class="progress"><div id="progressBar" class="bar"></div></div>
+</section>
+
+
+
+
+
+  <section class="card historySection" id="historySection">
+    <div class="tableToolbar">
+      <button id="historyFullscreenBtn" class="fullscreenBtn" type="button" title="Gridi tam ekran yap" aria-label="Gridi tam ekran yap" aria-pressed="false">⛶</button>
+    </div>
+    <div class="tableWrap historyFullscreenTableWrap">
+      <table id="historyTable">
+        <thead><tr>
+          <th data-key="symbol" title="Coin sembolünü gösterir. Spot varsa Spot USDT sembolü, yalnız Futures varsa USDⓈ-M Perpetual sembolü gösterilir.">Coin</th>
+          <th data-key="coinType" title="Coin türünü gösterir. Binance ürün etiketlerinde meme olarak işaretlenenler Meme Coin; diğer tanınan kategoriler kendi türüyle, sınıflanamayanlar Diğer Coin olarak gösterilir.">Type</th>
+          <th data-key="marketType" title="Coinin Binance üzerinde hangi pazarda aktif olduğunu gösterir: Spot, Futures veya Spot + Futures. Futures yalnız USDⓈ-M USDT Perpetual ve underlyingType=COIN sözleşmeleridir.">Market</th>
+          <th data-key="ys" title="YS, Total Supply ve güncel fiyatın tanımlı arz/fiyat aralıklarından en az birine birlikte girmesi halinde True olur. Total Supply doğrulanamazsa — gösterilir.">YS</th>
+          <th data-key="price" title="Coinin history için kullanılan Binance pazarındaki son fiyatını gösterir. Spot varsa Spot fiyatı, yalnız Futures varsa Futures fiyatı kullanılır.">Price</th>
+          <th data-key="totalSupply" title="Binance Info yaklaşımına en yakın doğrulanmış Total/Maximum Supply. Web3 contract totalSupply kullanılmaz. Değer güvenilir Binance metadata'da yoksa — gösterilir.">TotalSuply</th>
+          <th data-key="circulatingSupply" title="Binance Alpha token-list circulatingSupply alanı; MarketCap÷Price ile %2 tolerans içinde doğrulanır. Doğrulama yoksa — gösterilir.">CirculatingSuply</th>
+          <th data-key="volume24h" title="History için kullanılan Binance pazarındaki son 24 saatlik USDT bazlı işlem hacmini gösterir.">24h Volume</th>
+          <th data-key="historyDays" title="History kaynağında ilk günlük mumdan bugüne kadar geçen süreyi gösterir. Spot varsa Spot geçmişi tercih edilir; yalnız Futures varsa Futures geçmişi kullanılır.">Binance Yaşı</th>
+          <th data-key="allTimeHigh" title="Kullanılan Binance history kaynağında görülen en yüksek fiyatı gösterir.">Binance Max</th>
+          <th data-key="allTimeLow" title="Kullanılan Binance history kaynağında görülen en düşük fiyatı gösterir.">Binance Min</th>
+          <th data-key="priceLocationPct" title="Mevcut fiyatın Binance Min ile Binance Max arasındaki tarihsel konumunu yüzde olarak gösterir. 0% dibe, 100% tepeye yakındır.">Price Location %</th>
+          <th data-key="normal5mMovePct" title="Son 1000 tamamlanmış 5m mumdaki mutlak close-to-close getirilerin medyanıdır; yakın dönem tipik 5m hareket büyüklüğünü gösterir.">Normal 5m Move %</th>
+          <th data-key="p90_5mMovePct" title="Son 1000 tamamlanmış 5m mumdaki mutlak close-to-close getirilerin %90 persentilidir; yaklaşık %10 hareket daha büyüktür.">5m P90 %</th>
+          <th data-key="medianDailyRangePct" title="Son 180 tamamlanmış günlük mumda (High−Low)/Open yüzdesinin medyanıdır. İstatistiksel standart sapma değildir; tipik günlük intraday range'i gösterir.">Median Daily Range %</th>
+          <th data-key="medianDailyAbsReturnPct" title="Günlük kapanıştan kapanışa mutlak fiyat değişimlerinin medyanını gösterir.">Daily Abs Return %</th>
+          <th data-key="historicalMedianVolume30d" title="Son 30 tamamlanmış günlük mumun USDT bazlı quote volume medyanını gösterir.">Hist. Volume 30d</th>
+          <th data-key="volumeRatio" title="Rolling 24h quoteVolume / son 30 tamamlanmış UTC günlük mum quoteVolume medyanı. Pencere sınırları aynı olmadığı için yaklaşık bir aktivite oranıdır.">Current / Hist Vol X</th>
+          <th data-key="pumpEvents" title="Coinin kendi tarihsel hareket dağılımına göre dinamik olarak tanımlanan güçlü pozitif günlük hareketlerin sayısını gösterir.">Pump Events</th>
+          <th data-key="pumpRate30d" title="Tespit edilen pump olaylarının tarihsel örnek uzunluğuna göre 30 güne normalize edilmiş sıklığını gösterir.">Pump / 30d</th>
+          <th data-key="retracementRatePct" title="En az 5 pump örneğinde, sonraki 3 günün low değeri pump close-to-close kazancının en az %50’sini geri verirse retracement sayılır. Continuation ile aynı olayda birlikte oluşabilir.">Retracement %</th>
+          <th data-key="continuationRatePct" title="En az 5 pump örneğinde, sonraki 3 günün high değeri pump kazancının en az %50’si kadar daha yükselirse continuation sayılır. Retracement ile aynı olayda birlikte oluşabilir.">Continuation %</th>
+          <th data-key="directionEfficiency60dPct" title="Son 60 günlük kapanışlarda |son−ilk| / toplam |günlük değişim| ×100. Düşük değer choppy/düşük yönlülük, yüksek değer daha yönlü hareket demektir; tek başına dar yataylık kanıtı değildir.">Direction Efficiency 60d %</th>
+          <th data-key="maxDrawdown180dPct" title="Son 180 tamamlanmış günlük KAPANIŞ fiyatlarında peak-to-trough en büyük düşüş. Gün içi low bazlı drawdown değildir.">Close Max Drawdown 180d %</th>
+          <th data-key="volatilityCharacter" title="Normal 5m hareketi ve günlük volatilitenin tüm coin evrenindeki göreli seviyesine göre Düşük, Normal, Yüksek veya Çok Yüksek sınıflamasıdır.">Volatility</th>
+          <th data-key="pumpCharacter" title="Pump sıklığının diğer coinlere göre göreli seviyesini gösterir.">Pump Character</th>
+          <th data-key="riskCharacter" title="Volatilite, drawdown, pump sıklığı ve pump sonrası retracement verilerini birlikte kullanarak coin tarihsel risk karakterini göreli olarak sınıflandırır. Al/Sat sinyali değildir.">History Risk</th>
+          <th data-key="historyComment" title="Coinin yaş, volatilite, yataylık, pump/retracement, fiyat konumu ve hacim davranışını kısa Türkçe cümlelerle özetler. Al/Sat sinyali değildir.">History Comment</th>
+          <th data-key="updatedAt" title="Bu coin için history profilinin en son hesaplandığı zamanı gösterir.">Updated</th>
+        </tr></thead>
+        <tbody id="historyBody"><tr><td colspan="29" class="empty">Henüz history profili yok.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/history.js"></script>
+<footer class="appBottomBar">Not investment advice.</footer>
+
+</body>
+</html>

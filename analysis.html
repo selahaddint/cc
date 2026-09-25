@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#07101d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Precise 15 — Analysis</title>
+  <style>
+    :root{
+      --bg:#07101d;--panel:#0d1727;--panel2:#111e31;--border:#23334b;--text:#e9f0fb;--muted:#93a4bc;
+      --bluebg:#152640;--bluebd:#3d6598;--greenbg:#10261e;--greenbd:#2e6d52;--amberbg:#2c2511;--amberbd:#796329;
+      --redbg:#2d171b;--redbd:#7c3440;--accent:#78aaff;--good:#77d6a7;--warn:#ffd36d;--bad:#ff8292;--info:#91b9ff;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;font-size:16px}
+    body{margin:0;padding-top:54px;padding-bottom:24px;background:linear-gradient(180deg,#06101c 0%,var(--bg) 60%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px;line-height:1.45}
+    .app{width:min(100%,1500px);margin:0 auto;padding:14px 18px 18px}
+    .panel{background:rgba(13,23,39,.96);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;min-width:0}
+    .panel-title{margin:0 0 10px;font-size:15px;font-weight:800}
+    .radio-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .choice,.filter-row{display:flex;align-items:center;gap:10px;cursor:pointer}
+    input[type="radio"],input[type="checkbox"]{width:19px;height:19px;flex:0 0 19px;accent-color:var(--accent)}
+    .choice{min-height:46px;border:1px solid var(--bluebd);border-radius:10px;padding:9px 12px;background:var(--bluebg);font-weight:800;font-size:14px;min-width:0}
+    .choice span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .filter-list{display:grid;gap:8px}
+    .filter-row{min-height:48px;border:1px solid var(--border);border-radius:10px;padding:9px 10px;background:#101b2d}
+    .filter-row:hover{border-color:#35577f;background:#122039}
+    .no{width:23px;flex:0 0 23px;font-weight:800;color:#b8c9df}
+    .filter-main{display:flex;flex-direction:column;gap:2px;line-height:1.25;min-width:0}
+    .filter-main strong{font-size:13px}.filter-main span{font-size:12px;color:var(--muted)}
+    button{min-height:44px;border:1px solid var(--border);border-radius:10px;background:#18273d;color:var(--text);padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation}
+    button:hover{background:#203654;border-color:#35577f}button:disabled{opacity:.55;cursor:default}
+    #analyzeBtn{width:100%;background:#2859a0;border-color:#3f75c1;font-size:15px}#analyzeBtn:hover{background:#3269b5}
+    .status{min-height:0;margin:10px 0 0;border:1px solid var(--border);background:var(--panel2);border-radius:10px;padding:9px 10px;color:var(--muted);font-size:12px;line-height:1.4}
+    .status:empty{display:none}.status.error{font-weight:700;color:var(--bad)}
+    .result-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:10px 2px 7px;color:#b8c9df;font-size:12px;font-weight:700}
+.tableSection{padding:10px}
+    .tableToolbar{display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px}
+    .fullscreenBtn{width:38px;height:38px;min-width:38px;min-height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:21px;line-height:1;border-radius:9px;background:#18273d;border:1px solid #35577f}
+    .fullscreenBtn:hover{border-color:var(--accent);background:#203654}
+    .table-wrap{border:1px solid var(--border);border-radius:11px;overflow:auto;-webkit-overflow-scrolling:touch;background:var(--panel);max-height:calc(100vh - 245px)}
+    table{width:max-content;min-width:1320px;border-collapse:separate;border-spacing:0;background:var(--panel);font-size:12px}
+    th,td{border-right:1px solid #1a293f;border-bottom:1px solid #1a293f;padding:8px 9px;text-align:left;vertical-align:middle;white-space:nowrap;line-height:1.2}
+    th{position:sticky;top:0;z-index:2;background:#101d30;color:#b8c9df;font-weight:800;cursor:pointer;user-select:none}th.sortActive{background:#16263d;color:#e9f0fb}.sortMark{margin-left:5px;font-size:9px;color:var(--accent);font-weight:900}
+    th:last-child,td:last-child{border-right:0}tr:last-child td{border-bottom:0}tbody tr:hover td{background:#101c2c}
+    td.coin{font-weight:800;color:#dceaff}td.num{text-align:right;font-variant-numeric:tabular-nums}td.time{font-variant-numeric:tabular-nums}
+    tr.recent-coin td{background:var(--amberbg)}tr.recent-coin:hover td{background:#342b13}
+    .age-cell{font-weight:800}.age-cell small{display:block;margin-top:3px;font-size:9px;font-weight:600;color:var(--muted)}
+    .tableSection:fullscreen{width:100vw;height:100vh;max-width:none;margin:0;padding:10px;border:0;border-radius:0;background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+    .tableSection:fullscreen::backdrop{background:#07101d}.tableSection:fullscreen .tableToolbar{flex:0 0 auto}.tableSection:fullscreen .analysisFullscreenTableWrap{flex:1 1 auto;max-height:none;height:auto;min-height:0;border-radius:8px}.tableSection:fullscreen table{min-width:1320px}
+    .tableSection.fullscreenFallback{position:fixed;inset:0;z-index:10000;width:100vw;height:100vh;max-width:none;margin:0;padding:10px;border:0;border-radius:0;background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+    .tableSection.fullscreenFallback .tableToolbar{flex:0 0 auto}.tableSection.fullscreenFallback .analysisFullscreenTableWrap{flex:1 1 auto;max-height:none;height:auto;min-height:0;border-radius:8px}
+
+    /* Shared application chrome */
+    .appTopBar{position:fixed;top:0;left:0;right:0;height:54px;z-index:5000;display:flex;align-items:center;justify-content:center;background:rgba(7,16,29,.97);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding-top:env(safe-area-inset-top)}
+    .appTopBarTitle{position:absolute;left:max(64px,calc(env(safe-area-inset-left) + 64px));top:50%;transform:translateY(-50%);font-size:15px;font-weight:800;letter-spacing:.25px;color:var(--text);pointer-events:none;text-align:left}
+    .appMenuToggle{position:fixed;opacity:0;pointer-events:none}
+    .appMenuButton{position:absolute;left:max(12px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:40px;height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;background:transparent;cursor:pointer;z-index:5002;padding:0;min-height:40px}
+    .appMenuButton:hover{background:#132238}.appMenuButton span{display:block;width:22px;height:2px;border-radius:999px;background:var(--text);transition:transform .2s ease,opacity .2s ease}
+    .appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(1){transform:translateY(7px) rotate(45deg)}.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(2){opacity:0}.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+    .appMenuBackdrop{position:fixed;inset:54px 0 24px 0;z-index:4997;background:rgba(0,0,0,.46);opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s ease;cursor:pointer}
+    .appSideMenu{position:fixed;top:54px;left:0;bottom:24px;width:min(290px,82vw);z-index:4998;background:#0b1524;border-right:1px solid var(--border);box-shadow:18px 0 45px rgba(0,0,0,.38);padding:14px 12px;transform:translateX(-102%);transition:transform .22s ease;overflow:auto}
+    .appMenuToggle:checked ~ .appMenuBackdrop{opacity:1;visibility:visible}.appMenuToggle:checked ~ .appSideMenu{transform:translateX(0)}
+    .appSideMenuTitle{padding:5px 8px 12px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.appNav{display:grid;gap:8px}
+    .appNavLink{display:flex;align-items:center;min-height:48px;padding:0 14px;border:1px solid var(--border);border-radius:11px;background:#111e31;color:var(--text);font-size:14px;font-weight:800;text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+    .appNavLink:hover{background:#182b46;border-color:#35577f}.appNavLink:active{transform:scale(.99)}.appNavLink.active{background:#173154;border-color:#3f75c1;color:#dceaff}
+    .appBottomBar{position:fixed;left:0;right:0;bottom:0;z-index:5000;height:24px;display:flex;align-items:center;justify-content:center;padding:0 max(8px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px,env(safe-area-inset-left));background:rgba(7,16,29,.97);border-top:1px solid var(--border);color:#7f91aa;font-size:9px;line-height:1;letter-spacing:.02em;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+    @media(max-width:700px){
+      .app{padding:10px}.panel{padding:10px}.radio-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.choice{min-height:42px;padding:7px 9px;font-size:13px;gap:7px}.choice input{width:17px;height:17px;flex-basis:17px}
+      .filter-row{padding:8px;min-height:45px}.filter-main strong{font-size:12px}.filter-main span{font-size:11px}.tableSection{padding:8px}.table-wrap{max-height:calc(100vh - 235px)}table{font-size:11px}th,td{padding:7px 8px}.fullscreenBtn{width:36px;height:36px;min-width:36px;min-height:36px;font-size:20px}
+      .appSideMenu{width:min(280px,84vw)}
+    }
+  
+/* Shared local access gate */
+body.authLocked{overflow:hidden}
+body.authLocked .wrap,
+body.authLocked .app{visibility:hidden;pointer-events:none;user-select:none}
+.authGate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,9,17,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.authGate[hidden]{display:none!important}
+.authBox{width:min(420px,100%);background:#0d1727;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+.authBox h2{margin:0 0 6px;font-size:20px}
+.authBox p{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.45}
+.authBox label{display:block;margin:10px 0 5px;color:#b8c6d8;font-size:11px}
+.authBox input{width:100%;min-height:44px;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);color:var(--text);padding:11px 12px;font-size:16px;outline:none}
+.authBox input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(120,170,255,.12)}
+.authActions{margin-top:16px}
+.authActions button{width:100%;background:#2859a0;border-color:#3f75c1}
+.authActions button:hover{background:#3269b5}
+.authError{min-height:18px;margin-top:10px;color:var(--bad);font-size:12px}
+</style>
+</head>
+<body class="authLocked">
+<input id="appMenuToggle" class="appMenuToggle" type="checkbox" aria-hidden="true">
+<header class="appTopBar" aria-label="Application navigation">
+  <label for="appMenuToggle" class="appMenuButton" role="button" aria-label="Open menu" title="Menu">
+    <span></span><span></span><span></span>
+  </label>
+  <div class="appTopBarTitle">Precise 15 — Analysis</div>
+</header>
+<label for="appMenuToggle" class="appMenuBackdrop" aria-hidden="true"></label>
+<aside class="appSideMenu" aria-label="Main menu">
+  <div class="appSideMenuTitle">Menu</div>
+  <nav class="appNav">
+    <a class="appNavLink" href="index.html" target="_blank" rel="noopener">Finder</a>
+    <a class="appNavLink" href="history.html" target="_blank" rel="noopener">History</a>
+    <a class="appNavLink active" href="javascript:void(0);" onclick="window.location.reload();">Analysis</a>
+  </nav>
+</aside>
+
+<div id="authGate" class="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <form id="authForm" class="authBox" autocomplete="off">
+    <h2 id="authTitle">Giriş</h2>
+    <p>Devam etmek için kullanıcı adı ve şifre girin.</p>
+    <label for="authUser">Kullanıcı Adı</label>
+    <input id="authUser" type="text" autocomplete="username" required autofocus>
+    <label for="authPass">Şifre</label>
+    <input id="authPass" type="password" autocomplete="current-password" required>
+    <div class="authActions"><button type="submit">Giriş Yap</button></div>
+    <div id="authError" class="authError" aria-live="polite"></div>
+  </form>
+</div>
+
+<main class="app">
+<section class="panel">
+    <div class="radio-row">
+      <label class="choice"><input type="radio" name="supplyType" value="total" checked><span>Total</span></label>
+      <label class="choice"><input type="radio" name="supplyType" value="circulating"><span>Circulation</span></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">Filtreler</h2>
+    <div class="filter-list">
+      <label class="filter-row"><input class="range-filter" type="checkbox" data-id="1" data-supply-max="100000" data-price-min="100" data-price-max="500" data-exclusive="false"><span class="no">1</span><span class="filter-main"><strong>1 – 100.000 adet</strong><span>100 – 500 USDT</span></span></label>
+      <label class="filter-row"><input class="range-filter" type="checkbox" data-id="2" data-supply-max="1000000" data-price-min="30" data-price-max="100" data-exclusive="false"><span class="no">2</span><span class="filter-main"><strong>1 – 1.000.000 adet</strong><span>30 – 100 USDT</span></span></label>
+      <label class="filter-row"><input class="range-filter" type="checkbox" data-id="3" data-supply-max="10000000" data-price-min="1" data-price-max="10" data-exclusive="false"><span class="no">3</span><span class="filter-main"><strong>1 – 10.000.000 adet</strong><span>1 – 10 USDT</span></span></label>
+      <label class="filter-row"><input class="range-filter" type="checkbox" data-id="4" data-supply-max="100000000" data-price-min="1" data-price-max="5" data-exclusive="false"><span class="no">4</span><span class="filter-main"><strong>1 – 100.000.000 adet</strong><span>1 – 5 USDT</span></span></label>
+      <label class="filter-row"><input class="range-filter" type="checkbox" data-id="5" data-supply-max="1000000000" data-price-min="0.01" data-price-max="0.1" data-exclusive="true"><span class="no">5</span><span class="filter-main"><strong>1 – 1.000.000.000 adet</strong><span>0,01 – &lt;0,10 USDT</span></span></label>
+      <label class="filter-row"><input class="range-filter" type="checkbox" data-id="6" data-supply-max="10000000000" data-price-min="0.001" data-price-max="0.01" data-exclusive="true"><span class="no">6</span><span class="filter-main"><strong>1 – 10.000.000.000 adet</strong><span>0,001 – &lt;0,01 USDT</span></span></label>
+    </div>
+  </section>
+
+  <button id="analyzeBtn" type="button">Analiz Et</button>
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+  <div class="result-meta"><span id="resultCount">0 coin</span><span id="supplyModeLabel">Filtre: Total Supply</span></div>
+<section class="panel tableSection" id="analysisTableSection">
+    <div class="tableToolbar">
+      <button id="analysisFullscreenBtn" class="fullscreenBtn" type="button" title="Gridi tam ekran yap" aria-label="Gridi tam ekran yap" aria-pressed="false">⛶</button>
+    </div>
+    <div class="table-wrap analysisFullscreenTableWrap">
+      <table id="analysisTable">
+        <thead><tr>
+          <th data-key="symbol">Coin</th>
+          <th data-key="price">Price</th>
+          <th data-key="volume24hQuote">24h Volume</th>
+          <th data-key="totalSupply">Total Supply</th>
+          <th data-key="circulatingSupply">Circulating Supply</th>
+          <th data-key="listingTime">Age</th>
+          <th data-key="allTimeHigh">Max</th>
+          <th data-key="allTimeLow">Min</th>
+          <th data-key="requestTime">Hour</th>
+        </tr></thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+
+<script src="js/auth.js"></script>
+<script src="js/analysis.js"></script>
+<footer class="appBottomBar">Not investment advice.</footer>
+
+</body>
+</html>

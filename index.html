@@ -1,0 +1,1466 @@
+<!doctype html>
+<!-- UI Version: 14.30 — Range Breakout scanner integration -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#07101d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cr Offer">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Precise 15 — Finder</title>
+<style>
+:root{
+  --bg:#07101d;--panel:#0d1727;--panel2:#111e31;--border:#23334b;--text:#e9f0fb;--muted:#93a4bc;
+  --bluebg:#152640;--bluebd:#3d6598;--greenbg:#10261e;--greenbd:#2e6d52;--amberbg:#2c2511;--amberbd:#796329;
+  --redbg:#2d171b;--redbd:#7c3440;--accent:#78aaff;--good:#77d6a7;--warn:#ffd36d;--bad:#ff8292;--info:#91b9ff;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:linear-gradient(180deg,#06101c 0%,var(--bg) 60%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.wrap{max-width:1500px;margin:0 auto;padding:18px}
+.header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}
+h1{font-size:27px;line-height:1.15;margin:0 0 7px}.sub{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
+.badges{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.badge{border:1px solid var(--border);border-radius:999px;padding:7px 9px;color:var(--muted);font-size:11px;white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.card{grid-column:span 6;background:rgba(13,23,39,.96);border:1px solid var(--border);border-radius:14px;padding:15px;min-width:0}.card.full{grid-column:1/-1}
+h2{font-size:16px;margin:0 0 5px}.desc{font-size:12px;color:var(--muted);line-height:1.5;margin:0 0 13px}.fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.field{min-width:0}.field label{display:block;font-size:11px;color:#b8c6d8;margin-bottom:5px}
+input,select{width:100%;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);color:var(--text);padding:11px 12px;font-size:16px;min-height:44px;outline:none}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(120,170,255,.12)}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.autoScanToggle{min-height:44px;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);color:var(--text);padding:8px 11px;font-weight:700;cursor:pointer;white-space:nowrap;user-select:none}
+.autoScanToggle:hover{background:#203654;border-color:var(--accent)}
+.autoScanToggle input[type=checkbox]{width:18px!important;height:18px!important;min-height:0!important;flex:0 0 18px;padding:0!important;margin:0;accent-color:var(--accent);box-shadow:none}
+.autoScanToggle span{font-size:12px}
+.autoScanToggle .autoScanCountdown{min-width:43px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:800;border-left:1px solid var(--bluebd);padding-left:8px}button{min-height:44px;border:1px solid var(--border);border-radius:10px;background:#18273d;color:var(--text);padding:10px 14px;font-weight:700;cursor:pointer;touch-action:manipulation}button.primary{background:#2859a0;border-color:#3f75c1}button.danger{background:#412129;border-color:#753845}button:disabled{opacity:.55;cursor:not-allowed}
+.results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.r{background:var(--greenbg);border:1px solid var(--greenbd);border-radius:11px;padding:10px;min-width:0}.r .k{font-size:10px;color:#a8cbb9}.r .v{font-size:17px;font-weight:760;word-break:break-word;margin-top:3px}.r.wide{grid-column:1/-1}
+.status{margin-top:10px;border:1px solid var(--border);background:var(--panel2);border-radius:10px;padding:10px 11px;font-size:12px;line-height:1.5}.good{color:var(--good)!important}.warn{color:var(--warn)!important}.bad{color:var(--bad)!important}.info{color:var(--info)!important}
+.progressShell{height:10px;background:#111b2b;border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-top:10px}.progressBar{height:100%;width:0;background:linear-gradient(90deg,#517fca,#76aafc);transition:width .2s ease}
+.stageLine{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.tableWrap{overflow:auto;border:1px solid var(--border);border-radius:11px;max-height:620px}table{border-collapse:separate;border-spacing:0;width:100%;min-width:1040px;font-size:11px}thead th{position:sticky;top:0;background:#101d30;z-index:2;color:#b8c9df;text-align:left;padding:9px 8px;border-bottom:1px solid var(--border);white-space:nowrap}tbody td{padding:9px 8px;border-bottom:1px solid #1a293f;white-space:nowrap}tbody tr:hover{background:#101c2c}.num{text-align:right;font-variant-numeric:tabular-nums}.symbol{font-weight:800;font-size:12px}.pill{display:inline-block;border-radius:999px;padding:4px 7px;font-size:10px;font-weight:800;border:1px solid var(--border)}.pill.select{color:var(--good);background:var(--greenbg);border-color:var(--greenbd)}.pill.caution{color:var(--warn);background:var(--amberbg);border-color:var(--amberbd)}.pill.wait{color:#c7b9ff;background:#211d36;border-color:#51477e}.pill.reject{color:var(--bad);background:var(--redbg);border-color:var(--redbd)}.pill.ready{color:var(--good);background:var(--greenbg);border-color:var(--greenbd)}.pill.blocked,.pill.invalidated{color:var(--bad);background:var(--redbg);border-color:var(--redbd)}.pill.skip{color:var(--warn);background:var(--amberbg);border-color:var(--amberbd)}.pill.notrun{color:var(--muted);background:#111b2b;border-color:var(--border)}
+.queue{display:flex;gap:8px;flex-wrap:wrap}.queueItem{background:var(--greenbg);border:1px solid var(--greenbd);border-radius:999px;padding:8px 10px;font-size:12px}.empty{color:var(--muted);font-size:12px;padding:14px}
+details{border:1px solid var(--border);border-radius:11px;background:#0b1524;margin-top:10px}summary{cursor:pointer;padding:12px;font-weight:800;font-size:13px}.detailsBody{padding:0 12px 12px}.guideTable{min-width:960px}.note{font-size:11px;color:var(--muted);line-height:1.5}.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.legend span{font-size:10px;border-radius:999px;padding:6px 9px}.legend .inp{background:var(--bluebg);border:1px solid var(--bluebd);color:#c8daf4}.legend .out{background:var(--greenbg);border:1px solid var(--greenbd);color:#b9dfcd}
+.log{max-height:220px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;line-height:1.55;background:#080f19;border:1px solid var(--border);border-radius:10px;padding:10px;color:#9eb0c8;white-space:pre-wrap}
+.sep{height:1px;background:var(--border);margin:13px 0}.small{font-size:10px;color:var(--muted)}
+.checkField{display:flex;flex-direction:column;justify-content:flex-end}.checkBoxLabel{min-height:44px;display:flex!important;align-items:center;gap:10px;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);padding:10px 12px;color:var(--text)!important;font-size:13px!important;cursor:pointer}.checkBoxLabel input[type=checkbox]{width:18px;height:18px;min-height:0;padding:0;margin:0;accent-color:#78aaff;box-shadow:none}.rankField{grid-column:span 2}.riskChecks{display:flex;gap:7px;flex-wrap:wrap;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);padding:8px;min-height:44px}.riskCheck{display:flex!important;align-items:center;gap:6px;margin:0!important;padding:7px 9px;border:1px solid #35577f;border-radius:8px;background:#102039;color:#d9e6f7!important;font-size:12px!important;cursor:pointer;white-space:nowrap}.riskCheck input[type=checkbox]{width:16px;height:16px;min-height:0;padding:0;margin:0;accent-color:#78aaff;box-shadow:none}.pill.normal{color:var(--muted);background:#111b2b;border-color:var(--border)}.pill.watch{color:var(--warn);background:var(--amberbg);border-color:var(--amberbd)}.pill.strong{color:var(--good);background:var(--greenbg);border-color:var(--greenbd)}.pill.explosive{color:#ffd8a8;background:#3a2413;border-color:#9a5d2b}.pill.unavailable{color:var(--bad);background:var(--redbg);border-color:var(--redbd)}.pill.off{color:var(--muted);background:#111b2b;border-color:var(--border)}.pill.favorable{color:var(--good);background:var(--greenbg);border-color:var(--greenbd)}.pill.unfavorable{color:var(--bad);background:var(--redbg);border-color:var(--redbd)}.pill.calibrating,.pill.wait_location{color:var(--warn);background:var(--amberbg);border-color:var(--amberbd)}.pill.insufficient{color:var(--muted);background:#111b2b;border-color:var(--border)}
+
+.monitorInput{width:130px!important;min-height:34px!important;padding:6px 8px!important;font-size:12px!important;border-radius:8px!important}
+.followBtn{min-height:34px!important;padding:6px 11px!important;font-size:11px!important;white-space:nowrap}
+.monitorDot{display:inline-block;width:15px;height:15px;border-radius:50%;vertical-align:middle;border:2px solid rgba(255,255,255,.18);box-shadow:0 0 0 2px rgba(0,0,0,.15)}
+.monitorDot.off{background:#64748b}.monitorDot.green{background:#34d399;box-shadow:0 0 10px rgba(52,211,153,.38)}.monitorDot.yellow{background:#fbbf24;box-shadow:0 0 10px rgba(251,191,36,.38)}.monitorDot.red{background:#fb7185;box-shadow:0 0 10px rgba(251,113,133,.45)}
+.monitorReason{white-space:normal!important;min-width:300px;max-width:520px;line-height:1.35}.monitorTime{font-size:9px;color:var(--muted);margin-top:3px}
+.liveChangeCell{white-space:normal!important;min-width:520px;max-width:820px;line-height:1.35}.liveResultCell{white-space:normal!important;min-width:320px;max-width:520px;line-height:1.35;font-weight:750}
+.ysMark{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:13px;font-weight:900}.ysMark.true{color:var(--good);background:var(--greenbg);border:1px solid var(--greenbd)}.ysMark.false{color:var(--bad);background:var(--redbg);border:1px solid var(--redbd)}.ysMark.unknown{color:var(--muted);background:#111b2b;border:1px solid var(--border)}
+.metaAge{white-space:nowrap}.metaAge small{display:block;color:var(--muted);font-size:9px;margin-top:2px}
+.symbolBtn{appearance:none;border:0;background:transparent;color:var(--accent);padding:0;min-height:0;font:inherit;font-weight:800;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.symbolBtn:hover{color:#b8d2ff}.symbolBtn:disabled{opacity:.65;cursor:progress}
+.decisionCell{font-weight:800}.decisionCell.loading{color:var(--warn)}.decisionCell.na{color:var(--muted)}
+.watchCell{text-align:center;min-width:104px}
+.watchSignal{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:88px;border-radius:999px;padding:5px 8px;font-size:9px;font-weight:900;border:1px solid var(--border);white-space:nowrap}
+.watchSignalDot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 9px}
+.watchSignal.green{color:var(--good);background:var(--greenbg);border-color:var(--greenbd)}.watchSignal.green .watchSignalDot{background:#34d399;box-shadow:0 0 9px rgba(52,211,153,.42)}
+.watchSignal.yellow{color:var(--warn);background:var(--amberbg);border-color:var(--amberbd)}.watchSignal.yellow .watchSignalDot{background:#fbbf24;box-shadow:0 0 9px rgba(251,191,36,.38)}
+.watchSignal.red{color:var(--bad);background:var(--redbg);border-color:var(--redbd)}.watchSignal.red .watchSignalDot{background:#fb7185;box-shadow:0 0 9px rgba(251,113,133,.45)}
+.watchSignal.off{color:var(--muted);background:#111b2b;border-color:var(--border)}.watchSignal.off .watchSignalDot{background:#64748b}
+.watchSignalTime{margin-top:3px;color:var(--muted);font-size:8px;font-variant-numeric:tabular-nums}
+.watchActiveBtn{background:#163929!important;border-color:#2e6d52!important;color:#a8f0ca!important}
+
+@media(max-width:980px){.card{grid-column:1/-1}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.results{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.wrap{padding:10px}.header{display:block}.badges{justify-content:flex-start;margin-top:10px}.fields,.results{grid-template-columns:1fr}.rankField{grid-column:1/-1}.toolbar{display:grid;grid-template-columns:1fr 1fr}.toolbar button{width:100%}h1{font-size:23px}.card{padding:13px}.tableWrap{max-height:520px}}
+
+.scanPrimaryFields{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.scanPrimaryFields .field label{font-size:10px;margin-bottom:4px}
+.rangeScanControl{min-width:138px;display:flex;align-items:center}
+.rangeScanControl select{width:138px;min-width:138px;min-height:44px;padding:9px 10px;font-size:13px;font-weight:700}
+#rangeBreakoutScanBtn{white-space:nowrap}
+@media(max-width:600px){
+  .scanPrimaryFields{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .scanPrimaryFields input{min-width:0;padding:9px 7px;font-size:14px}
+  .scanPrimaryFields .field label{font-size:9px}
+  .rangeScanControl{min-width:0;width:100%}
+  .rangeScanControl select{width:100%;min-width:0}
+}
+
+.toolbarHidden{display:none!important}
+.visuallyHiddenSupport{display:none!important}
+
+
+/* Local access gate */
+body.authLocked{overflow:hidden}
+body.authLocked .wrap{visibility:hidden;pointer-events:none;user-select:none}
+.authGate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,9,17,.94);backdrop-filter:blur(8px)}
+.authGate[hidden]{display:none!important}
+.authBox{width:min(420px,100%);background:#0d1727;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+.authBox h2{margin:0 0 6px;font-size:20px}.authBox p{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.45}
+.authBox label{display:block;margin:10px 0 5px;color:#b8c6d8;font-size:11px}
+.authBox input{width:100%}
+.authActions{margin-top:16px}.authActions button{width:100%}
+.authError{min-height:18px;margin-top:10px;color:var(--bad);font-size:12px}
+
+
+/* Candidate grid fullscreen control */
+.candidateHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}
+.candidateHeader h2{margin:0}
+.fullscreenBtn{width:38px;height:38px;min-height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:21px;line-height:1;border-radius:9px;background:#18273d;border-color:#35577f}
+.fullscreenBtn:hover{border-color:var(--accent);background:#203654}
+.candidateSection:fullscreen{width:100vw;height:100vh;max-width:none;margin:0;padding:12px;border:0;border-radius:0;background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+.candidateSection:fullscreen::backdrop{background:#07101d}
+.candidateSection:fullscreen .candidateHeader{flex:0 0 auto;margin-bottom:8px}
+.candidateSection:fullscreen .candidateFullscreenTableWrap{flex:1 1 auto;max-height:none;height:auto;min-height:0;border-radius:8px}
+.candidateSection:fullscreen #candidateTable{min-width:1040px}
+@media(max-width:600px){.fullscreenBtn{width:36px;height:36px;min-height:36px;font-size:20px}.candidateSection:fullscreen{padding:8px}}
+
+
+/* Mobile-style application chrome */
+body{padding-top:54px;padding-bottom:24px}
+.appTopBar{position:fixed;top:0;left:0;right:0;height:54px;z-index:5000;display:flex;align-items:center;justify-content:center;background:rgba(7,16,29,.97);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding-top:env(safe-area-inset-top)}
+.appTopBarTitle{position:absolute;left:max(64px,calc(env(safe-area-inset-left) + 64px));top:50%;transform:translateY(-50%);font-size:15px;font-weight:800;letter-spacing:.25px;color:var(--text);pointer-events:none;text-align:left}
+.appMenuToggle{position:fixed;opacity:0;pointer-events:none}
+.appMenuButton{position:absolute;left:max(12px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:40px;height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;background:transparent;cursor:pointer;touch-action:manipulation;z-index:5002}
+.appMenuButton:hover{background:#132238}
+.appMenuButton span{display:block;width:22px;height:2px;border-radius:999px;background:var(--text);transition:transform .2s ease,opacity .2s ease}
+.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(2){opacity:0}
+.appMenuToggle:checked ~ .appTopBar .appMenuButton span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.appMenuBackdrop{position:fixed;inset:54px 0 24px 0;z-index:4997;background:rgba(0,0,0,.46);opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s ease;cursor:pointer}
+.appSideMenu{position:fixed;top:54px;left:0;bottom:24px;width:min(290px,82vw);z-index:4998;background:#0b1524;border-right:1px solid var(--border);box-shadow:18px 0 45px rgba(0,0,0,.38);padding:14px 12px;transform:translateX(-102%);transition:transform .22s ease;overflow:auto}
+.appMenuToggle:checked ~ .appMenuBackdrop{opacity:1;visibility:visible}
+.appMenuToggle:checked ~ .appSideMenu{transform:translateX(0)}
+.appSideMenuTitle{padding:5px 8px 12px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.appNav{display:grid;gap:8px}
+.appNavLink{display:flex;align-items:center;min-height:48px;padding:0 14px;border:1px solid var(--border);border-radius:11px;background:#111e31;color:var(--text);font-size:14px;font-weight:800;text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+.appNavLink:hover{background:#182b46;border-color:#35577f}
+.appNavLink:active{transform:scale(.99)}
+.appNavLink.active{background:#173154;border-color:#3f75c1;color:#dceaff}
+.appBottomBar{position:fixed;left:0;right:0;bottom:0;z-index:5000;height:24px;display:flex;align-items:center;justify-content:center;padding:0 max(8px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px,env(safe-area-inset-left));background:rgba(7,16,29,.97);border-top:1px solid var(--border);color:#7f91aa;font-size:9px;line-height:1;letter-spacing:.02em;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+@media(max-width:600px){body{padding-top:54px;padding-bottom:24px}.wrap{padding-top:10px}.appSideMenu{width:min(280px,84vw)}}
+
+
+
+/* UI Final — presentation only; scanner/follow logic remains in existing JS modules. */
+#candidateTable th:nth-child(n+16),
+#candidateTable td:nth-child(n+16){display:none!important}
+#candidateTable{min-width:1080px}
+.monitorInput{width:96px!important;max-width:96px!important}
+.entryPriceInput,.stopPriceInput{-moz-appearance:textfield;appearance:textfield}
+.entryPriceInput::-webkit-outer-spin-button,.entryPriceInput::-webkit-inner-spin-button,
+.stopPriceInput::-webkit-outer-spin-button,.stopPriceInput::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+#candidateBody .pill.select,#candidateBody .pill.caution{cursor:pointer;user-select:none}
+#candidateBody .pill.select:focus-visible,#candidateBody .pill.caution:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Follow locks Entry/Stop only. Coin name and Result detail must remain interactive. */
+#candidateBody .symbolBtn,#candidateBody .pill.select,#candidateBody .pill.caution{pointer-events:auto!important;position:relative;z-index:3}
+
+.resultModal[hidden]{display:none!important}
+.resultModal{position:fixed;inset:0;z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(2,7,14,.76);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.resultModalPanel{width:min(760px,100%);max-height:min(86vh,900px);display:flex;flex-direction:column;background:#0d1727;border:1px solid var(--border);border-radius:16px;box-shadow:0 28px 90px rgba(0,0,0,.5);overflow:hidden}
+.resultModalHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:#101d30}
+.resultModalHeader h2{margin:0;font-size:17px}
+.resultModalClose{width:36px;height:36px;min-height:36px;padding:0;border-radius:9px;font-size:20px;line-height:1}
+.resultModalBody{overflow:auto;padding:16px}
+.resultModalMeta{display:grid;gap:6px;margin-bottom:14px;padding:12px;border:1px solid var(--border);border-radius:11px;background:#0a1422}
+.resultMetaRow{font-size:12px;line-height:1.45;word-break:break-word}.resultMetaRow strong{color:#dbe7f7}
+.resultStopped{margin:0 0 14px;padding:10px 12px;border:1px solid var(--bluebd);border-radius:10px;background:var(--bluebg);font-size:12px}
+.resultFlow{display:grid;gap:8px}
+.resultFlowRow{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:#0b1524;font-size:12px;line-height:1.45}
+.resultFlowRow .flowStep{font-weight:800;color:#cbd9ea}.resultFlowRow .flowValue{min-width:0;word-break:break-word}
+.resultFlowRow.finalRow{border-color:var(--greenbd);background:var(--greenbg)}
+.resultInfo{margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#0b1524;font-size:11px;line-height:1.5;color:var(--muted);word-break:break-word}
+@media(max-width:600px){
+  #candidateTable{min-width:1000px}
+  .monitorInput{width:90px!important;max-width:90px!important;padding:6px!important}
+  .resultModal{padding:8px}.resultModalPanel{max-height:92vh}.resultModalBody{padding:12px}
+  .resultFlowRow{grid-template-columns:1fr;gap:4px}.resultFlowRow .flowStep{font-size:11px}
+}
+
+
+/* Report / local SQLite history */
+.reportModal[hidden]{display:none!important}
+.reportModal{position:fixed;inset:0;z-index:13000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(2,7,14,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.reportModalPanel{width:min(1180px,100%);max-height:min(88vh,940px);display:flex;flex-direction:column;background:#0d1727;border:1px solid var(--border);border-radius:16px;box-shadow:0 28px 90px rgba(0,0,0,.52);overflow:hidden}
+.reportModalHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:#101d30}
+.reportModalHeader h2{margin:0;font-size:17px}
+.reportModalClose{width:36px;height:36px;min-height:36px;padding:0;border-radius:9px;font-size:20px;line-height:1}
+.reportModalBody{overflow:auto;padding:14px}
+.reportMeta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;color:var(--muted);font-size:11px}
+.reportTableWrap{overflow:auto;border:1px solid var(--border);border-radius:11px;max-height:68vh}
+#reportTable{min-width:900px;width:100%;font-size:11px}#followReportTable{min-width:1220px;width:100%;font-size:11px}
+#reportTable th,#followReportTable th{cursor:pointer;user-select:none}
+#reportTable th:hover,#followReportTable th:hover{background:#162844}
+#reportTable th .sortMark,#followReportTable th .sortMark{display:inline-block;min-width:27px;margin-left:5px;color:var(--accent);font-size:10px}
+#reportTable td.reportCoins{white-space:normal;min-width:320px;line-height:1.4}
+#followReportTable td.followReportReason{white-space:normal;min-width:420px;max-width:760px;line-height:1.4}
+.reportEmpty{padding:18px!important;color:var(--muted);text-align:center}
+@media(max-width:600px){.reportModal{padding:8px}.reportModalPanel{max-height:94vh}.reportModalBody{padding:10px}.reportTableWrap{max-height:75vh}}
+
+</style>
+</head>
+<body class="authLocked">
+
+<input id="appMenuToggle" class="appMenuToggle" type="checkbox" aria-hidden="true">
+<header class="appTopBar" aria-label="Application navigation">
+  <label for="appMenuToggle" class="appMenuButton" role="button" aria-label="Open menu" title="Menu">
+    <span></span><span></span><span></span>
+  </label>
+  <div class="appTopBarTitle">Precise 15 — Finder</div>
+</header>
+<label for="appMenuToggle" class="appMenuBackdrop" aria-hidden="true"></label>
+<aside class="appSideMenu" aria-label="Main menu">
+  <div class="appSideMenuTitle">Menu</div>
+  <nav class="appNav">
+    <a class="appNavLink active" href="javascript:void(0);" onclick="window.location.reload();">Finder</a>
+    <a class="appNavLink" href="history.html" target="_blank" rel="noopener">History</a>
+    <a class="appNavLink" href="analysis.html" target="_blank" rel="noopener">Analysis</a>
+  </nav>
+</aside>
+
+
+<div id="authGate" class="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <form id="authForm" class="authBox" autocomplete="off">
+    <h2 id="authTitle">Giriş</h2>
+    <p>Devam etmek için kullanıcı adı ve şifre girin.</p>
+    <label for="authUser">Kullanıcı Adı</label>
+    <input id="authUser" type="text" autocomplete="username" required autofocus>
+    <label for="authPass">Şifre</label>
+    <input id="authPass" type="password" autocomplete="current-password" required>
+    <div class="authActions"><button class="primary" type="submit">Giriş Yap</button></div>
+    <div id="authError" class="authError" aria-live="polite"></div>
+  </form>
+</div>
+
+<div class="wrap">
+
+  <div class="grid">
+    <section class="card full">
+      <h2 id="scanSettingsTitle">Scan Settings</h2>
+      <div class="fields scanPrimaryFields">
+        <div class="field"><label>Sec.</label><input id="windowSec" type="number" min="1" max="604800" step="1" value="60"></div>
+        <div class="field"><label>MinY%</label><input id="minIncrease" type="number" min="0.01" max="100" step="0.01" value="0.40"></div>
+        <div class="field"><label>MaxY%</label><input id="maxIncrease" type="number" min="0.01" max="100" step="0.01" value="3.00"></div>
+      </div>
+      <div class="toolbar"><button id="startBtn" class="primary" type="button">Start Scan</button><button id="startShortBtn" type="button" title="4h–5m SHORT kaldıraç setup taraması">StartScanForShort</button><button id="lowestScanBtn" type="button" title="SEC saniye önceki fiyata göre MinY%–MaxY% aralığında düşenleri tarar">LowerScan</button><button id="startShortSevenDaysBtn" type="button" title="StartScanForShortSevenDays.js taramasını çalıştırır">StartScanForShortSevenDays</button><button id="oneMScanBtn" type="button" title="Son 3 kapanmış 1m UP mumu tarar">OneM Scan</button><button id="bookScanBtn" type="button" title="Kitap/Blueprint tabanlı erken LONG setup taraması">Book Scan</button><button id="coinScanBtn" type="button" title="Blueprint V2 LONG coin seçim taraması">CoinScan</button><button id="coinScanForShortBtn" type="button" title="Blueprint V2 SHORT coin seçim taraması">CoinScanForShort</button><div class="rangeScanControl"><select id="rangePeriod" aria-label="Range tarama dönemi" title="Geçmişteki gezinme/range yapısının inceleneceği dönem"><option value="2M">2 Ay</option><option value="1M" selected>1 Ay</option><option value="1W">1 Hafta</option><option value="3D">3 Gün</option><option value="1D">1 Gün</option><option value="4H">4 Saat</option><option value="1H">1 Saat</option><option value="15M">15 Dakika</option><option value="5M">5 Dakika</option></select></div><button id="rangeBreakoutScanBtn" type="button" title="Seçilen dönemde yatay/gezinme bölgesini bulur; taze üst kırılımda SELECT üretir">Range Scan</button><button id="watchBtn" type="button" title="Griddeki SELECT coinleri her zaman LONG giriş zamanlaması için izler">Watch</button><button id="reportBtn" type="button">Report</button><button id="followReportBtn" type="button">FollowReport</button><label class="autoScanToggle" for="autoScan" title="İşaretliyken scan tamamlandıktan 2 dakika sonra yeni scan otomatik başlar."><input id="autoScan" type="checkbox"><span>Auto 2m</span><span id="autoScanCountdown" class="autoScanCountdown">—</span></label><button id="cancelBtn" class="danger" type="button" disabled>Cancel</button><button id="refreshRankBtn" class="toolbarHidden" type="button" aria-hidden="true" tabindex="-1">Refresh Activity Rank</button><button id="clearEventsBtn" class="toolbarHidden" type="button" aria-hidden="true" tabindex="-1">Clear Event Watch</button><button id="csvBtn" class="toolbarHidden" type="button" disabled aria-hidden="true" tabindex="-1">Candidate CSV</button><button id="jsonBtn" class="toolbarHidden" type="button" disabled aria-hidden="true" tabindex="-1">Scan JSON</button></div>
+      <div class="status" id="mainStatus">Hazır. Start Scan ile tarama başlayacak.</div>
+      <div class="progressShell"><div class="progressBar" id="progressBar"></div></div>
+      <div class="stageLine"><span id="stageText">Idle</span><span id="progressText">0%</span></div>
+    </section>
+
+
+
+
+    <section class="card full candidateSection" id="candidateSection">
+      <div class="candidateHeader">
+        <h2 id="candidateResponseTitle">Candidate Response</h2>
+        <button id="candidateFullscreenBtn" class="fullscreenBtn" type="button" title="Gridi tam ekran yap" aria-label="Gridi tam ekran yap" aria-pressed="false">⛶</button>
+      </div>
+      <div class="tableWrap candidateFullscreenTableWrap">
+        <table id="candidateTable">
+          <thead><tr>
+            <th>#</th><th>Coin</th><th title="Total Supply + Spot USDT fiyatı YS aralıklarından birine giriyor ve Spot USDT başlangıcı 01.01.2025 veya sonrası mı?">YS</th><th>Result</th>
+            <th title="Coin'in mevcut fiyatının kendi yakın dönem fiyat geçmişindeki göreli konumu. Coin seçimini etkilemez; coin adına tıklanınca hesaplanır.">PriceLvl</th><th title="Coin'in kısa sürede sert yukarı/aşağı hareket etme eğilimi. Yön tahmini değildir ve coin seçimini etkilemez; coin adına tıklanınca hesaplanır.">RiskLvl</th>
+            <th>Entry</th><th>Stop</th><th>Price</th><th>Follow</th><th>Monitor</th><th>Reason</th><th>LiveChn</th><th>LiveRes</th><th title="LONG giriş zamanlaması: yeşil ENTRY, sarı WAIT, kırmızı NO ENTRY">Watch</th>
+          </tr></thead>
+          <tbody id="candidateBody"><tr><td colspan="15" class="empty">Henüz scan yapılmadı.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card visuallyHiddenSupport" aria-hidden="true">
+      <h2>Scan Summary</h2>
+      <div class="results">
+        <div class="r"><div class="k">Active Crypto Contracts</div><div class="v" id="sumActive">—</div></div>
+        <div class="r"><div class="k">Activity Ranked</div><div class="v" id="sumRanked">—</div></div>
+        <div class="r"><div class="k">Risk Universe</div><div class="v" id="sumUniverse">—</div></div>
+        <div class="r"><div class="k">Rank 300+</div><div class="v bad" id="sum301">—</div></div>
+        <div class="r"><div class="k">New Fast Events</div><div class="v" id="sumFast">—</div></div>
+        <div class="r"><div class="k">Active Event Watch</div><div class="v" id="sumEventWatch">—</div></div>
+        <div class="r"><div class="k">SELECT</div><div class="v good" id="sumSelect">—</div></div>
+        <div class="r"><div class="k">CAUTION</div><div class="v warn" id="sumCaution">—</div></div>
+        <div class="r visuallyHiddenSupport"><div class="k">WAIT</div><div class="v" id="sumWait">—</div></div>
+        <div class="r visuallyHiddenSupport"><div class="k">REJECT</div><div class="v bad" id="sumReject">—</div></div>
+        <div class="r"><div class="k">Entry Analyzed</div><div class="v" id="sumV2Analyzed">—</div></div>
+        <div class="r"><div class="k">Entry Ready</div><div class="v good" id="sumV2Ready">—</div></div>
+        <div class="r"><div class="k">Entry Not Ready</div><div class="v warn" id="sumV2Wait">—</div></div>
+        <div class="r"><div class="k">Entry Chase</div><div class="v bad" id="sumV2Skip">—</div></div>
+      </div>
+    </section>
+
+    <section class="card full">
+      <h2>Context</h2>
+      <div class="results">
+        <div class="r"><div class="k">BTC Return 4h</div><div class="v" id="ctxBtc">—</div></div>
+        <div class="r"><div class="k">Top-10 Median 4h</div><div class="v" id="ctxMedian">—</div></div>
+        <div class="r"><div class="k">Breadth</div><div class="v" id="ctxBreadth">—</div></div>
+        <div class="r"><div class="k">Context</div><div class="v" id="ctxResult">—</div></div>
+      </div>
+    </section>
+
+    <section class="card full visuallyHiddenSupport" aria-hidden="true">
+      <h2>Gate Diagnostics</h2>
+      <p class="desc">Her coin yalnız SELECT’i ilk engelleyen kapıda sayılır. 1h Transition ve soft warning’ler yalnız bilgi amaçlıdır; SELECT/CAUTION kararını değiştirmez. Structural R/R: ≥ 1.00 normal, 0.75–0.99 CAUTION, &lt; 0.75 DROP. Fast Events = Base Drops + Operational Drop + Entry Analyzed.</p>
+      <div class="results">
+        <div class="r"><div class="k">Fast Events</div><div class="v" id="gateFast">—</div></div>
+        <div class="r"><div class="k">Liquidity Drop</div><div class="v bad" id="gateLiquidity">—</div></div>
+        <div class="r"><div class="k">OI Drop</div><div class="v bad" id="gateOi">—</div></div>
+        <div class="r"><div class="k">Data Drop</div><div class="v bad" id="gateData">—</div></div>
+        <div class="r"><div class="k">Operational Drop</div><div class="v bad" id="gateOperational">—</div></div>
+        <div class="r"><div class="k">Entry Analyzed</div><div class="v" id="gateAnalyzed">—</div></div>
+        <div class="r"><div class="k">Entry Error</div><div class="v bad" id="gateEntryError">—</div></div>
+        <div class="r"><div class="k">1h Block</div><div class="v bad" id="gate1hBlock">—</div></div>
+        <div class="r"><div class="k">1h Transition (info)</div><div class="v warn" id="gate1hTransition">—</div></div>
+        <div class="r"><div class="k">Freshness / Elder</div><div class="v bad" id="gateFreshElder">—</div></div>
+        <div class="r"><div class="k">15m Setup</div><div class="v warn" id="gate15m">—</div></div>
+        <div class="r"><div class="k">5m Confirm</div><div class="v warn" id="gate5m">—</div></div>
+        <div class="r"><div class="k">Trigger / Zone</div><div class="v warn" id="gateTrigger">—</div></div>
+        <div class="r"><div class="k">R/R</div><div class="v bad" id="gateRR">—</div></div>
+        <div class="r"><div class="k">Other CAUTION</div><div class="v warn" id="gateSoft">—</div></div>
+        <div class="r"><div class="k">SELECT</div><div class="v good" id="gateSelect">—</div></div>
+      </div>
+    </section>
+
+    <section class="card full visuallyHiddenSupport" aria-hidden="true">
+      <h2>5m Confirmation Diagnostics</h2>
+      <p class="desc">Son tamamen kapanmış 5m mum doğrudan kullanılır; yeni mum kapanışı beklenmez. EMA 5m confirmation kuralında kullanılmaz. RSI / MACD / ATR olmak üzere 3 bileşen vardır. Herhangi 1/3 PASS ise 5m CONFIRMED; 0/3 ise 5m NOT READY / CAUTION. Closed 5m volume yalnız bilgi amaçlıdır.</p>
+      <div class="results">
+        <div class="r"><div class="k">0/3 — Not Ready</div><div class="v warn" id="gate5mScore0">—</div></div>
+        <div class="r"><div class="k">Fail RSI</div><div class="v" id="gate5mFailRsi">—</div></div>
+        <div class="r"><div class="k">Fail MACD Support</div><div class="v" id="gate5mFailMacd">—</div></div>
+        <div class="r"><div class="k">Fail ATR</div><div class="v" id="gate5mFailAtr">—</div></div>
+        <div class="r"><div class="k">Closed 5m VOL Weak (info)</div><div class="v" id="gate5mWeakVol">—</div></div>
+      </div>
+      <div class="visuallyHiddenSupport" aria-hidden="true">
+        <span id="gate5mTiming">—</span>
+        <span id="gate5mScore1">—</span>
+        <span id="gate5mScore2">—</span>
+        <span id="gate5mScore3">—</span>
+        <span id="gate5mFailEma">—</span>
+        <span id="gate5m3Ema">—</span>
+        <span id="gate5m3Macd">—</span>
+      </div>
+    </section>
+
+    <section class="card full visuallyHiddenSupport" aria-hidden="true">
+      <h2>Price Location Learning</h2>
+      <div class="results">
+        <div class="r"><div class="k">Learning Completed</div><div class="v" id="learnCompleted">—</div></div>
+        <div class="r"><div class="k">Learning Pending</div><div class="v" id="learnPending">—</div></div>
+        <div class="r"><div class="k">Statistical Gate</div><div class="v">30 / setup</div></div>
+      </div>
+    </section>
+
+    <div id="manualQueue" class="visuallyHiddenSupport"></div>
+    <div id="contextStatus" class="visuallyHiddenSupport"></div>
+    <div id="logBox" class="visuallyHiddenSupport">Ready.</div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+
+<script>
+(() => {
+  'use strict';
+  // One-time migration for the accidental 0.04 live threshold.
+  // Preserve every other user-customized scan setting.
+  const key = 'Precise15.ScanSettings.v1';
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      const minY = Number(saved?.minIncrease);
+      if (minY === 0.04) {
+        saved.minIncrease = 0.40;
+        localStorage.setItem(key, JSON.stringify(saved));
+      }
+    }
+  } catch (_) {
+    /* Storage can be unavailable in private/restricted browser modes. */
+  }
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.1/dist/sql-wasm.js"></script>
+<script src="js/ReportStore.js?v=14.27"></script>
+
+<script src="js/StartScan.js?v=14.19"></script>
+<script src="js/StartScanForShort.js?v=14.26"></script>
+<!-- LowestScan.js is the canonical module name. LowerScan.js is accepted only as a filename fallback. -->
+<script src="js/LowestScan.js?v=14.28" onerror="this.onerror=null;this.src='js/LowerScan.js?v=14.28';"></script>
+
+<!--
+  SevenDays compatibility loader:
+  If StartScanForShortSevenDays.js was copied from StartScanForShort.js and still
+  exports modules.startScanForShort / looks up #startShortBtn, capture it without
+  overwriting the normal SHORT scanner.
+-->
+<script>
+(() => {
+  'use strict';
+  window.__sevenDaysBridge = {
+    originalModule: window.CryptoFlowScanner?.modules?.startScanForShort || null,
+    legacyModule: null,
+    properModule: null,
+    loadFailed: false
+  };
+
+  const normal = document.getElementById('startShortBtn');
+  if (normal) normal.id = 'startShortBtnOriginal';
+
+  const proxy = document.createElement('button');
+  proxy.id = 'startShortBtn';
+  proxy.type = 'button';
+  proxy.hidden = true;
+  proxy.setAttribute('aria-hidden','true');
+  document.body.appendChild(proxy);
+  window.__sevenDaysBridge.proxy = proxy;
+  window.__sevenDaysBridge.normalButton = normal;
+})();
+</script>
+<script src="js/StartScanForShortSevenDays.js?v=14.28" onerror="window.__sevenDaysBridge && (window.__sevenDaysBridge.loadFailed=true);"></script>
+<script>
+(() => {
+  'use strict';
+  const bridge = window.__sevenDaysBridge || {};
+  const modules = window.CryptoFlowScanner?.modules;
+  const original = bridge.originalModule || null;
+  const afterLegacy = modules?.startScanForShort || null;
+  const proper = modules?.startScanForShortSevenDays || window.StartScanForShortSevenDays || null;
+
+  // A cloned SevenDays file commonly overwrites modules.startScanForShort.
+  // Capture that new object only if it differs from the original SHORT module.
+  if (afterLegacy && afterLegacy !== original) bridge.legacyModule = afterLegacy;
+  if (proper) bridge.properModule = proper;
+
+  if (modules && original) modules.startScanForShort = original;
+  if (modules && (bridge.properModule || bridge.legacyModule)) {
+    modules.startScanForShortSevenDays = bridge.properModule || bridge.legacyModule;
+  }
+
+  bridge.proxy?.remove();
+  if (bridge.normalButton) bridge.normalButton.id = 'startShortBtn';
+})();
+</script>
+
+<script src="js/RiskManagement.js"></script>
+
+<script src="js/BTCImpact.js"></script>
+<script src="js/Follow.js?v=14.23"></script>
+<script src="js/OneMScan.js?v=14.23"></script>
+<script src="js/BookScan.js?v=14.25"></script>
+<script src="js/coinscan.js"></script>
+<script src="js/CoinScanForShort.js?v=14.26"></script>
+<script src="js/RangeBreakoutScan.js?v=14.30"></script>
+<script src="js/Watch.js?v=14.29"></script>
+
+<script>
+(() => {
+  'use strict';
+
+  const button = document.getElementById('startShortSevenDaysBtn');
+  if (!button) return;
+
+  function setSevenDaysStatus(message, cls = 'info') {
+    const status = document.getElementById('mainStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.remove('good','warn','bad','info');
+    if (cls) status.classList.add(cls);
+  }
+
+  async function callApi(api) {
+    if (typeof api === 'function') return api();
+    if (typeof api?.start === 'function') return api.start();
+    if (typeof api?.scan === 'function') return api.scan();
+    throw new Error('SevenDays start()/scan() giriş noktası bulunamadı.');
+  }
+
+  async function withLegacyShortButtonAlias(work) {
+    const normal = document.getElementById('startShortBtn');
+    const seven = document.getElementById('startShortSevenDaysBtn');
+    if (!normal || !seven) return work();
+
+    normal.id = 'startShortBtnOriginal';
+    seven.id = 'startShortBtn';
+    try {
+      return await work();
+    } finally {
+      seven.id = 'startShortSevenDaysBtn';
+      normal.id = 'startShortBtn';
+    }
+  }
+
+  button.addEventListener('click', async () => {
+    const bridge = window.__sevenDaysBridge || {};
+    const api = window.CryptoFlowScanner?.modules?.startScanForShortSevenDays
+      || bridge.properModule
+      || bridge.legacyModule
+      || window.StartScanForShortSevenDays
+      || window.startScanForShortSevenDays;
+
+    if (!api) {
+      const msg = bridge.loadFailed
+        ? 'StartScanForShortSevenDays.js yüklenemedi. js klasöründe dosya adını kontrol et.'
+        : 'StartScanForShortSevenDays.js yüklendi ancak çalıştırılabilir start()/scan() bulunamadı.';
+      setSevenDaysStatus(msg, 'bad');
+      return;
+    }
+
+    if (button.disabled) return;
+    button.disabled = true;
+    const originalText = button.textContent;
+    button.textContent = 'SevenDays…';
+
+    try {
+      setSevenDaysStatus('StartScanForShortSevenDays başlatılıyor…', 'info');
+      const isLegacy = api === bridge.legacyModule && !bridge.properModule;
+      if (isLegacy) {
+        await withLegacyShortButtonAlias(() => callApi(api));
+      } else {
+        const result = callApi(api);
+        if (result && typeof result.then === 'function') await result;
+      }
+    } catch (error) {
+      console.error('StartScanForShortSevenDays error:', error);
+      setSevenDaysStatus(`StartScanForShortSevenDays hata: ${error?.message || error}`, 'bad');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  });
+})();
+</script>
+
+
+<script>
+(() => {
+  'use strict';
+
+  const button = document.getElementById('coinScanBtn');
+  const cancelButton = document.getElementById('cancelBtn');
+  const status = document.getElementById('mainStatus');
+  const stage = document.getElementById('stageText');
+  const progressText = document.getElementById('progressText');
+  const progressBar = document.getElementById('progressBar');
+  const body = document.getElementById('candidateBody');
+  const responseTitle = document.getElementById('candidateResponseTitle');
+  if (!button || !status || !stage || !progressText || !progressBar || !body) return;
+
+  let running = false;
+  let waitTimer = null;
+  let waitUntil = 0;
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const finite = value => Number.isFinite(Number(value));
+  const price = value => finite(value) ? Number(value).toLocaleString('en-US',{maximumFractionDigits:10}) : '—';
+
+  function setProgress(percent, stageText, statusText, cls = '') {
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    progressBar.style.width = `${p}%`;
+    progressText.textContent = `${Math.round(p)}%`;
+    stage.textContent = stageText || 'CoinScan';
+    status.textContent = statusText || 'CoinScan çalışıyor...';
+    status.classList.remove('good','warn','bad','info');
+    if (cls) status.classList.add(cls);
+  }
+
+  function stopWaitCountdown(){
+    if (waitTimer) clearInterval(waitTimer);
+    waitTimer = null;
+  }
+
+  function startWaitCountdown(waitMs){
+    stopWaitCountdown();
+    waitUntil = Date.now() + Number(waitMs || 0);
+    const tick = () => {
+      const sec = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
+      setProgress(12, 'Fast Event', `CoinScan: ikinci fiyat snapshot'ı bekleniyor • ${sec} sn`, 'info');
+      if (sec <= 0) stopWaitCountdown();
+    };
+    tick();
+    waitTimer = setInterval(tick, 250);
+  }
+
+  function resultPill(result){
+    const r = String(result || 'CAUTION').toUpperCase();
+    return `<span class="pill ${r === 'SELECT' ? 'select' : 'caution'}">${esc(r)}</span>`;
+  }
+
+  function reasonText(row){
+    const parts = [];
+    if (row.regime1h) parts.push(`1h ${row.regime1h}`);
+    if (row.setupFamily) parts.push(`15m ${row.setupFamily}`);
+    if (row.quality5m && finite(row.quality5m.count)) parts.push(`5m ${row.quality5m.count}/3`);
+    if (finite(row.valueDistanceAtr15)) parts.push(`NoChase ${Number(row.valueDistanceAtr15).toFixed(2)} ATR`);
+    if (Array.isArray(row.reasons) && row.reasons.length) parts.push(...row.reasons);
+    return parts.join(' • ') || '—';
+  }
+
+  function liveText(row){
+    const d = row.liveDirection;
+    if (!d) return '—';
+    return `15m ${d.m15 || '—'} | 5m ${d.m5 || '—'} | 3m ${d.m3 || '—'}`;
+  }
+
+  function renderResults(result){
+    const all = Array.isArray(result?.all) ? result.all : [];
+    const selects = all.filter(r => r?.result === 'SELECT');
+    const cautions = all.filter(r => r?.result !== 'SELECT').slice(0, 3);
+    const rows = [...selects, ...cautions];
+
+    window.CryptoOfferData = window.CryptoOfferData || {};
+    window.CryptoOfferData.coinScanState = {
+      startedAt: result?.startedAt || Date.now(),
+      completedAt: result?.completedAt || Date.now(),
+      results: all
+    };
+
+    if (responseTitle) {
+      const hm = new Intl.DateTimeFormat('tr-TR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(result?.completedAt || Date.now()));
+      responseTitle.textContent = `CoinScan - ${hm}`;
+    }
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="15" class="empty">CoinScan: Fast Event kriterini geçen aday bulunamadı.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = rows.map((row, i) => {
+      const reason = reasonText(row);
+      return `<tr data-symbol="${esc(row.coin)}">
+        <td>${i + 1}</td>
+        <td class="symbol">${esc(row.coin)}</td>
+        <td><span class="ysMark unknown">—</span></td>
+        <td>${resultPill(row.result)}</td>
+        <td class="decisionCell na">—</td>
+        <td class="decisionCell na">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">${esc(price(row.price))}</td>
+        <td>—</td>
+        <td>—</td>
+        <td class="monitorReason"><span class="reasonText" title="${esc(reason)}">${esc(reason)}</span></td>
+        <td class="liveChangeCell">${esc(liveText(row))}</td>
+        <td class="liveResultCell">${esc(row.result || '—')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  window.addEventListener('coinscan:progress', event => {
+    if (!running) return;
+    const d = event.detail || {};
+    if (d.stage === 'UNIVERSE') setProgress(3, 'Universe', 'CoinScan: aktif ürün evreni hazırlanıyor...', 'info');
+    else if (d.stage === 'SNAPSHOT_1') setProgress(7, 'Snapshot 1', `CoinScan: ilk fiyat snapshot'ı alındı • ${d.eligibleSymbols ?? '—'} coin`, 'info');
+    else if (d.stage === 'FAST_EVENT_WAIT') startWaitCountdown(d.waitMs);
+    else if (d.stage === 'SNAPSHOT_2') { stopWaitCountdown(); setProgress(25, 'Snapshot 2', "CoinScan: ikinci fiyat snapshot'ı alınıyor...", 'info'); }
+    else if (d.stage === 'FAST_EVENT_COMPLETE') setProgress(35, 'Fast Event', `CoinScan: ${d.candidateCount ?? 0} aday bulundu. Yapı analizi başlıyor...`, 'info');
+    else if (d.stage === 'STRUCTURE_SETUP_CONFIRMATION') setProgress(42, '1h → 15m → 5m', `CoinScan: ${d.candidateCount ?? 0} aday için rejim/setup/teyit kontrolü...`, 'info');
+    else if (d.stage === 'CANDIDATE_ANALYZED') {
+      const total = Math.max(1, Number(d.total) || 1);
+      const index = Math.max(0, Number(d.index) || 0);
+      const p = 42 + (index / total) * 53;
+      setProgress(p, 'Candidate Analysis', `CoinScan: ${index}/${total} • ${d.coin || ''} • ${d.result || ''}`, 'info');
+    }
+  });
+
+  window.addEventListener('coinscan:complete', event => {
+    if (!running) return;
+    stopWaitCountdown();
+    const result = event.detail || {};
+    renderResults(result);
+    const selectCount = Array.isArray(result.select) ? result.select.length : 0;
+    const cautionCount = Array.isArray(result.caution) ? result.caution.length : 0;
+    setProgress(100, 'Completed', `CoinScan tamamlandı • SELECT ${selectCount} • CAUTION ${cautionCount}`, selectCount ? 'good' : 'warn');
+  });
+
+  window.addEventListener('coinscan:error', event => {
+    if (!running) return;
+    stopWaitCountdown();
+    setProgress(0, 'Error', `CoinScan hata: ${event.detail?.message || 'Bilinmeyen hata'}`, 'bad');
+  });
+
+  window.addEventListener('coinscan:cancelled', () => {
+    if (!running) return;
+    stopWaitCountdown();
+    setProgress(0, 'Cancelled', 'CoinScan iptal edildi.', 'warn');
+  });
+
+  button.addEventListener('click', async () => {
+    if (!window.CoinScan || typeof window.CoinScan.scan !== 'function') {
+      setProgress(0, 'Error', 'CoinScan: js/coinscan.js yüklenemedi veya CoinScan.scan() bulunamadı.', 'bad');
+      return;
+    }
+    if (running) return;
+
+    running = true;
+    button.disabled = true;
+    button.textContent = 'CoinScan…';
+    if (cancelButton) cancelButton.disabled = false;
+    body.innerHTML = `<tr><td colspan="15" class="empty">CoinScan çalışıyor...</td></tr>`;
+    setProgress(1, 'Starting', 'CoinScan başlatılıyor...', 'info');
+
+    try {
+      await window.CoinScan.scan();
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('CoinScan error:', error);
+        setProgress(0, 'Error', `CoinScan hata: ${error?.message || error}`, 'bad');
+      }
+    } finally {
+      stopWaitCountdown();
+      running = false;
+      button.disabled = false;
+      button.textContent = 'CoinScan';
+      if (cancelButton) cancelButton.disabled = true;
+    }
+  });
+
+  if (cancelButton) {
+    cancelButton.addEventListener('click', () => {
+      if (running && window.CoinScan?.cancel) window.CoinScan.cancel();
+    });
+  }
+})();
+</script>
+
+<script>
+(() => {
+  'use strict';
+
+  const button = document.getElementById('coinScanForShortBtn');
+  const cancelButton = document.getElementById('cancelBtn');
+  const status = document.getElementById('mainStatus');
+  const stage = document.getElementById('stageText');
+  const progressText = document.getElementById('progressText');
+  const progressBar = document.getElementById('progressBar');
+  const body = document.getElementById('candidateBody');
+  const responseTitle = document.getElementById('candidateResponseTitle');
+  if (!button || !status || !stage || !progressText || !progressBar || !body) return;
+
+  let running = false;
+  let waitTimer = null;
+  let waitUntil = 0;
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const finite = value => Number.isFinite(Number(value));
+  const price = value => finite(value) ? Number(value).toLocaleString('en-US',{maximumFractionDigits:10}) : '—';
+
+  function setProgress(percent, stageText, statusText, cls = '') {
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    progressBar.style.width = `${p}%`;
+    progressText.textContent = `${Math.round(p)}%`;
+    stage.textContent = stageText || 'CoinScanForShort';
+    status.textContent = statusText || 'CoinScanForShort çalışıyor...';
+    status.classList.remove('good','warn','bad','info');
+    if (cls) status.classList.add(cls);
+  }
+
+  function stopWaitCountdown(){
+    if (waitTimer) clearInterval(waitTimer);
+    waitTimer = null;
+  }
+
+  function startWaitCountdown(waitMs){
+    stopWaitCountdown();
+    waitUntil = Date.now() + Number(waitMs || 0);
+    const tick = () => {
+      const sec = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
+      setProgress(12, 'Fast Event SHORT', `CoinScanForShort: ikinci fiyat snapshot'ı bekleniyor • ${sec} sn`, 'info');
+      if (sec <= 0) stopWaitCountdown();
+    };
+    tick();
+    waitTimer = setInterval(tick, 250);
+  }
+
+  function resultPill(result){
+    const r = String(result || 'CAUTION').toUpperCase();
+    return `<span class="pill ${r === 'SELECT' ? 'select' : 'caution'}">${esc(r)}</span>`;
+  }
+
+  function reasonText(row){
+    const parts = [];
+    if (row.regime1h) parts.push(`1h ${row.regime1h}`);
+    if (row.setupFamily) parts.push(`15m ${row.setupFamily}`);
+    if (row.quality5m && finite(row.quality5m.count)) parts.push(`5m ${row.quality5m.count}/3`);
+    if (finite(row.valueDistanceAtr15)) parts.push(`NoChase ${Number(row.valueDistanceAtr15).toFixed(2)} ATR`);
+    if (Array.isArray(row.reasons) && row.reasons.length) parts.push(...row.reasons);
+    return parts.join(' • ') || '—';
+  }
+
+  function liveText(row){
+    const d = row.liveDirection;
+    if (!d) return '—';
+    return `15m ${d.m15 || '—'} | 5m ${d.m5 || '—'} | 3m ${d.m3 || '—'}`;
+  }
+
+  function renderResults(result){
+    const all = Array.isArray(result?.all) ? result.all : [];
+    const selects = all.filter(r => r?.result === 'SELECT');
+    const cautions = all.filter(r => r?.result !== 'SELECT').slice(0, 3);
+    const rows = [...selects, ...cautions];
+
+    window.CryptoOfferData = window.CryptoOfferData || {};
+    window.CryptoOfferData.coinScanForShortState = {
+      startedAt: result?.startedAt || Date.now(),
+      completedAt: result?.completedAt || Date.now(),
+      side: 'SHORT',
+      results: all
+    };
+
+    if (responseTitle) {
+      const hm = new Intl.DateTimeFormat('tr-TR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(result?.completedAt || Date.now()));
+      responseTitle.textContent = `CoinScanForShort - ${hm}`;
+    }
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="15" class="empty">CoinScanForShort: Fast Event kriterini geçen aday bulunamadı.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = rows.map((row, i) => {
+      const reason = reasonText(row);
+      return `<tr data-symbol="${esc(row.coin)}">
+        <td>${i + 1}</td>
+        <td class="symbol">${esc(row.coin)}</td>
+        <td><span class="ysMark unknown">—</span></td>
+        <td>${resultPill(row.result)}</td>
+        <td class="decisionCell na">—</td>
+        <td class="decisionCell na">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">${esc(price(row.price))}</td>
+        <td>—</td>
+        <td>—</td>
+        <td class="monitorReason"><span class="reasonText" title="${esc(reason)}">${esc(reason)}</span></td>
+        <td class="liveChangeCell">${esc(liveText(row))}</td>
+        <td class="liveResultCell">${esc(row.result || '—')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  window.addEventListener('coinscanforshort:progress', event => {
+    if (!running) return;
+    const d = event.detail || {};
+    if (d.stage === 'UNIVERSE') setProgress(3, 'Universe SHORT', 'CoinScanForShort: aktif ürün evreni hazırlanıyor...', 'info');
+    else if (d.stage === 'SNAPSHOT_1') setProgress(7, 'Snapshot 1', `CoinScanForShort: ilk fiyat snapshot'ı alındı • ${d.eligibleSymbols ?? '—'} coin`, 'info');
+    else if (d.stage === 'FAST_EVENT_WAIT') startWaitCountdown(d.waitMs);
+    else if (d.stage === 'SNAPSHOT_2') { stopWaitCountdown(); setProgress(25, 'Snapshot 2', "CoinScanForShort: ikinci fiyat snapshot'ı alınıyor...", 'info'); }
+    else if (d.stage === 'FAST_EVENT_COMPLETE') setProgress(35, 'Fast Event SHORT', `CoinScanForShort: ${d.candidateCount ?? 0} aday bulundu. Yapı analizi başlıyor...`, 'info');
+    else if (d.stage === 'STRUCTURE_SETUP_CONFIRMATION') setProgress(42, '1h → 15m → 5m SHORT', `CoinScanForShort: ${d.candidateCount ?? 0} aday için rejim/setup/teyit kontrolü...`, 'info');
+    else if (d.stage === 'CANDIDATE_ANALYZED') {
+      const total = Math.max(1, Number(d.total) || 1);
+      const index = Math.max(0, Number(d.index) || 0);
+      const p = 42 + (index / total) * 53;
+      setProgress(p, 'Candidate Analysis SHORT', `CoinScanForShort: ${index}/${total} • ${d.coin || ''} • ${d.result || ''}`, 'info');
+    }
+  });
+
+  window.addEventListener('coinscanforshort:complete', event => {
+    if (!running) return;
+    stopWaitCountdown();
+    const result = event.detail || {};
+    renderResults(result);
+    const selectCount = Array.isArray(result.select) ? result.select.length : 0;
+    const cautionCount = Array.isArray(result.caution) ? result.caution.length : 0;
+    setProgress(100, 'Completed SHORT', `CoinScanForShort tamamlandı • SELECT ${selectCount} • CAUTION ${cautionCount}`, selectCount ? 'good' : 'warn');
+  });
+
+  window.addEventListener('coinscanforshort:error', event => {
+    if (!running) return;
+    stopWaitCountdown();
+    setProgress(0, 'Error', `CoinScanForShort hata: ${event.detail?.message || 'Bilinmeyen hata'}`, 'bad');
+  });
+
+  window.addEventListener('coinscanforshort:cancelled', () => {
+    if (!running) return;
+    stopWaitCountdown();
+    setProgress(0, 'Cancelled', 'CoinScanForShort iptal edildi.', 'warn');
+  });
+
+  button.addEventListener('click', async () => {
+    if (!window.CoinScanForShort || typeof window.CoinScanForShort.scan !== 'function') {
+      setProgress(0, 'Error', 'CoinScanForShort: js/CoinScanForShort.js yüklenemedi veya CoinScanForShort.scan() bulunamadı.', 'bad');
+      return;
+    }
+    if (running) return;
+
+    running = true;
+    button.disabled = true;
+    button.textContent = 'CoinScanForShort…';
+    if (cancelButton) cancelButton.disabled = false;
+    body.innerHTML = `<tr><td colspan="15" class="empty">CoinScanForShort çalışıyor...</td></tr>`;
+    setProgress(1, 'Starting SHORT', 'CoinScanForShort başlatılıyor...', 'info');
+
+    try {
+      await window.CoinScanForShort.scan();
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('CoinScanForShort error:', error);
+        setProgress(0, 'Error', `CoinScanForShort hata: ${error?.message || error}`, 'bad');
+      }
+    } finally {
+      stopWaitCountdown();
+      running = false;
+      button.disabled = false;
+      button.textContent = 'CoinScanForShort';
+      if (cancelButton) cancelButton.disabled = true;
+    }
+  });
+
+  if (cancelButton) {
+    cancelButton.addEventListener('click', () => {
+      if (running && window.CoinScanForShort?.cancel) window.CoinScanForShort.cancel();
+    });
+  }
+})();
+</script>
+
+
+<script>
+(() => {
+  'use strict';
+
+  const button = document.getElementById('rangeBreakoutScanBtn');
+  const periodSelect = document.getElementById('rangePeriod');
+  const cancelButton = document.getElementById('cancelBtn');
+  const status = document.getElementById('mainStatus');
+  const stage = document.getElementById('stageText');
+  const progressText = document.getElementById('progressText');
+  const progressBar = document.getElementById('progressBar');
+  const body = document.getElementById('candidateBody');
+  const responseTitle = document.getElementById('candidateResponseTitle');
+  if (!button || !periodSelect || !status || !stage || !progressText || !progressBar || !body) return;
+
+  let running = false;
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const finite = value => Number.isFinite(Number(value));
+  const price = value => finite(value) ? Number(value).toLocaleString('en-US',{maximumFractionDigits:10}) : '—';
+  const pct = (value, digits=2) => finite(value) ? `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(digits)}%` : '—';
+  const ratio = value => finite(value) ? `${Number(value).toFixed(2)}x` : '—';
+
+  function setProgress(percent, stageText, statusText, cls = '') {
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    progressBar.style.width = `${p}%`;
+    progressText.textContent = `${Math.round(p)}%`;
+    stage.textContent = stageText || 'Range Scan';
+    status.textContent = statusText || 'Range Scan çalışıyor...';
+    status.classList.remove('good','warn','bad','info');
+    if (cls) status.classList.add(cls);
+  }
+
+  function reasonText(row) {
+    const parts = [
+      `Range ${finite(row.rangeWidthPct) ? Number(row.rangeWidthPct).toFixed(2) + '%' : '—'}`,
+      `Low ${price(row.rangeLow)}`,
+      `High ${price(row.rangeHigh)}`,
+      `Break ${pct(row.breakoutPctAboveRangeHigh)}`,
+      `Buffer ${price(row.breakoutBuffer)}`,
+      `RVOL ${ratio(row.volumeRatio)}`
+    ];
+    return parts.join(' • ');
+  }
+
+  function renderResults(result, startedAt) {
+    const selects = Array.isArray(result?.selects) ? result.selects : [];
+
+    window.CryptoOfferData = window.CryptoOfferData || {};
+    window.CryptoOfferData.rangeBreakoutState = {
+      startedAt,
+      completedAt: Date.now(),
+      period: result?.period,
+      periodLabel: result?.periodLabel,
+      interval: result?.interval,
+      results: Array.isArray(result?.all) ? result.all : selects
+    };
+
+    if (responseTitle) {
+      const hm = new Intl.DateTimeFormat('tr-TR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+      responseTitle.textContent = `Range Scan ${result?.periodLabel || result?.period || ''} - ${hm}`;
+    }
+
+    if (!selects.length) {
+      const nearCount = Number(result?.nearCount) || 0;
+      body.innerHTML = `<tr><td colspan="15" class="empty">Range Scan: SELECT bulunamadı.${nearCount ? ` RangeHigh'a yakın ${nearCount} aday var; henüz kırılım doğrulanmadı.` : ''}</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = selects.map((row, i) => {
+      const reason = reasonText(row);
+      const live = `RangeHigh ${price(row.rangeHigh)} | +${finite(row.breakoutPctAboveRangeHigh) ? Number(row.breakoutPctAboveRangeHigh).toFixed(2) : '—'}% | RVOL ${ratio(row.volumeRatio)}`;
+      return `<tr data-symbol="${esc(row.symbol)}">
+        <td>${i + 1}</td>
+        <td class="symbol">${esc(row.symbol)}</td>
+        <td><span class="ysMark unknown">—</span></td>
+        <td><span class="pill select">SELECT</span></td>
+        <td class="decisionCell na">—</td>
+        <td class="decisionCell na">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">${esc(price(row.currentPrice))}</td>
+        <td>—</td>
+        <td>—</td>
+        <td class="monitorReason"><span class="reasonText" title="${esc(reason)}">${esc(reason)}</span></td>
+        <td class="liveChangeCell">${esc(live)}</td>
+        <td class="liveResultCell">SELECT • ${esc(result?.period || row.period || '')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function onProgress(p) {
+    if (!running) return;
+    const phase = String(p?.phase || '');
+    if (phase === 'universe') {
+      setProgress(3, 'Range Universe', `Range Scan ${periodSelect.options[periodSelect.selectedIndex]?.text || periodSelect.value}: ürün evreni hazırlanıyor...`, 'info');
+      return;
+    }
+    if (phase === 'scan') {
+      const total = Math.max(0, Number(p?.total) || 0);
+      const done = Math.max(0, Number(p?.done) || 0);
+      const percent = total > 0 ? 5 + (done / total) * 92 : 5;
+      const suffix = p?.symbol ? ` • ${p.symbol}${p.lastResult ? ` • ${p.lastResult}` : ''}` : '';
+      setProgress(percent, 'Range Analysis', `Range Scan: ${done}/${total}${suffix}`, 'info');
+      return;
+    }
+    if (phase === 'done') {
+      setProgress(100, 'Range Completed', `Range Scan tamamlanıyor • SELECT ${Number(p?.selectCount) || 0}`, Number(p?.selectCount) ? 'good' : 'warn');
+    }
+  }
+
+  button.addEventListener('click', async () => {
+    if (!window.RangeBreakoutScan || typeof window.RangeBreakoutScan.scan !== 'function') {
+      setProgress(0, 'Error', 'RangeBreakoutScan.js yüklenemedi veya RangeBreakoutScan.scan() bulunamadı.', 'bad');
+      return;
+    }
+    if (running) return;
+
+    running = true;
+    const startedAt = Date.now();
+    const originalText = button.textContent;
+    button.disabled = true;
+    periodSelect.disabled = true;
+    button.textContent = 'Range Scan…';
+    if (cancelButton) cancelButton.disabled = false;
+    body.innerHTML = `<tr><td colspan="15" class="empty">Range Scan çalışıyor...</td></tr>`;
+    setProgress(1, 'Range Starting', `Range Scan başlatılıyor • ${periodSelect.options[periodSelect.selectedIndex]?.text || periodSelect.value}`, 'info');
+
+    try {
+      const result = await window.RangeBreakoutScan.scan({
+        period: periodSelect.value,
+        onProgress
+      });
+      if (!running) return;
+      renderResults(result, startedAt);
+      const selectCount = Number(result?.selectCount) || 0;
+      const nearCount = Number(result?.nearCount) || 0;
+      const errorCount = Number(result?.errorCount) || 0;
+      const cls = selectCount ? 'good' : 'warn';
+      setProgress(
+        100,
+        'Range Completed',
+        `Range Scan ${result?.periodLabel || result?.period || ''} tamamlandı • SELECT ${selectCount} • Near ${nearCount}${errorCount ? ` • Error ${errorCount}` : ''}`,
+        cls
+      );
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        setProgress(0, 'Range Cancelled', 'Range Scan iptal edildi.', 'warn');
+      } else {
+        console.error('Range Scan error:', error);
+        setProgress(0, 'Error', `Range Scan hata: ${error?.message || error}`, 'bad');
+      }
+    } finally {
+      running = false;
+      button.disabled = false;
+      periodSelect.disabled = false;
+      button.textContent = originalText;
+      if (cancelButton) cancelButton.disabled = true;
+    }
+  });
+
+  if (cancelButton) {
+    cancelButton.addEventListener('click', () => {
+      if (running && window.RangeBreakoutScan?.stop) {
+        window.RangeBreakoutScan.stop();
+      }
+    });
+  }
+})();
+</script>
+
+<script>
+(() => {
+  'use strict';
+  const section = document.getElementById('candidateSection');
+  const button = document.getElementById('candidateFullscreenBtn');
+  if (!section || !button) return;
+
+  function syncFullscreenButton(){
+    const active = document.fullscreenElement === section;
+    button.textContent = active ? '×' : '⛶';
+    button.title = active ? 'Tam ekrandan çık' : 'Gridi tam ekran yap';
+    button.setAttribute('aria-label', active ? 'Tam ekrandan çık' : 'Gridi tam ekran yap');
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+
+  button.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement === section) {
+        await document.exitFullscreen();
+      } else if (!document.fullscreenElement) {
+        await section.requestFullscreen();
+      }
+    } catch (_) {
+      /* Browser fullscreen permission/availability may vary. */
+    }
+  });
+
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
+  syncFullscreenButton();
+})();
+</script>
+
+
+
+
+
+<div id="resultDetailModal" class="resultModal" hidden aria-hidden="true">
+  <section class="resultModalPanel" role="dialog" aria-modal="true" aria-labelledby="resultDetailTitle">
+    <div class="resultModalHeader">
+      <h2 id="resultDetailTitle">Result Detail</h2>
+      <button id="resultDetailClose" class="resultModalClose" type="button" aria-label="Kapat">×</button>
+    </div>
+    <div id="resultDetailBody" class="resultModalBody"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const body = document.getElementById('candidateBody');
+  const title = document.getElementById('candidateResponseTitle');
+  const modal = document.getElementById('resultDetailModal');
+  const modalTitle = document.getElementById('resultDetailTitle');
+  const modalBody = document.getElementById('resultDetailBody');
+  const closeButton = document.getElementById('resultDetailClose');
+  if (!body || !title || !modal || !modalTitle || !modalBody || !closeButton) return;
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const finite = value => Number.isFinite(Number(value));
+  const num = (value, digits=2) => finite(value) ? Number(value).toFixed(digits) : '—';
+  const pct = value => finite(value) ? `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(3)}%` : '—';
+  const compact = value => finite(value) ? new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:2}).format(Number(value)) : '—';
+  const when = value => finite(value) ? new Intl.DateTimeFormat('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(Number(value))) : '—';
+  const passFail = check => check && typeof check.pass === 'boolean' ? (check.pass ? 'PASS' : 'FAIL') : '—';
+
+  function currentCandidate(symbol){
+    const normalState = window.CryptoOfferData?.scanState;
+    const shortState = window.CryptoOfferData?.shortScanState;
+    const bookState = window.CryptoOfferData?.bookScanState;
+    const coinState = window.CryptoOfferData?.coinScanState;
+    const coinShortState = window.CryptoOfferData?.coinScanForShortState;
+    const rangeState = window.CryptoOfferData?.rangeBreakoutState;
+    const scannerStates = [normalState, shortState, bookState, coinState, coinShortState, rangeState]
+      .filter(Boolean)
+      .sort((a,b)=>(Number(b?.startedAt)||0)-(Number(a?.startedAt)||0));
+
+    for (const state of scannerStates) {
+      const rows = state?.results;
+      const found = Array.isArray(rows) ? rows.find(r => (r?.symbol || r?.coin) === symbol) : null;
+      if (found) return found;
+    }
+
+    const followed = window.CryptoFlowScanner?.modules?.follow?.getPreservedRows?.();
+    return Array.isArray(followed) ? followed.find(r => r?.symbol === symbol) || null : null;
+  }
+
+  function isBookScanCandidate(r){
+    return !!r?.chartAnalysis?.bookRuleMap;
+  }
+
+  function isRangeBreakoutCandidate(r){
+    return !!r && finite(r.rangeHigh) && finite(r.rangeLow) && !!r.period;
+  }
+
+  function trimAgeCell(cell){
+    if (!cell) return '—';
+    const clone = cell.cloneNode(true);
+    clone.querySelectorAll('small').forEach(x => x.remove());
+    return clone.textContent.trim() || '—';
+  }
+
+  function rowMeta(tr){
+    const text = role => tr.querySelector(`[data-role="${role}"]`)?.textContent?.trim() || '—';
+    return {
+      volume:text('meta-volume'),
+      total:text('meta-total-supply'),
+      circ:text('meta-circ-supply'),
+      age:trimAgeCell(tr.querySelector('[data-role="meta-age"]')),
+      max:text('meta-max'),
+      min:text('meta-min')
+    };
+  }
+
+  function stoppedAt(r){
+    if (!r) return 'Detail unavailable';
+    if (r.result === 'SELECT') return 'Completed';
+    const c = r.chartAnalysis;
+    if (!c) return 'Base scan';
+
+    if (isBookScanCandidate(r)) {
+      if (c.step7?.regime === 'DOWNTREND') return '1h Context';
+      if (c.step8?.status !== 'PASS') return '15m Structure / Setup';
+      if (c.step9?.status !== 'CONFIRMED') return '5m Trigger';
+      if (c.step10?.status !== 'READY') return 'No Chase';
+      const rr=c.priceLocation?.structuralAsymmetry;
+      if (!(rr === Infinity || finite(rr)) || (finite(rr) && Number(rr) < 1)) return 'R/R';
+      return 'Final Decision';
+    }
+
+    if (c.step7?.regime === 'DOWNTREND') return '1h';
+    const f=c.entryFreshness, e=c.entryImpulse;
+    if (!f || ['UNAVAILABLE','CALIBRATING'].includes(f.status) || !e || ['UNAVAILABLE','BEARISH'].includes(e.status)) return 'Freshness / Elder';
+    if (c.step8?.status !== 'PASS') return '15m Setup';
+    if (c.step9?.status !== 'CONFIRMED') return '5m Confirm';
+    if (c.step10?.status !== 'READY') return 'Trigger / Zone';
+    const rr=c.priceLocation?.structuralAsymmetry;
+    if (!(rr === Infinity || finite(rr)) || (finite(rr) && Number(rr) < 1)) return 'R/R';
+    return 'Final Decision';
+  }
+
+  function flowRows(r){
+    const c=r?.chartAnalysis || {};
+    const checks=c.step9?.checks || {};
+    const rr=c.priceLocation?.structuralAsymmetry;
+    const rrText=rr === Infinity ? 'OPEN' : finite(rr) ? num(rr,2) : '—';
+    const fast=`${pct(r?.fastChange)}${finite(r?.fastEventTime) ? ` • ${when(r.fastEventTime)}` : ''}`;
+    const liquidity=`PASS • Spread ${pct(r?.liveSpread)} • Depth ${compact(r?.liveDepth)} USDT`;
+    const oi=`${esc(r?.oiShortStatus || 'PASS')} • 5m ${pct(r?.deltaOi5)} • 15m ${pct(r?.deltaOi15)}`;
+    const oneHour=`${esc(c.step7?.regime || r?.trend1hRegime || '—')}${c.step7?.reason ? ` — ${esc(c.step7.reason)}` : ''}`;
+    const setup=`${esc(c.step8?.status || '—')}${c.step8?.setup ? ` / ${esc(c.step8.setup)}` : ''}${c.step8?.reason ? ` — ${esc(c.step8.reason)}` : ''}`;
+    const confirm=`${esc(c.step9?.status || '—')}${c.step9?.score ? ` • ${esc(c.step9.score)}` : ''} • RSI ${passFail(checks.rsi)} • MACD ${passFail(checks.macd)} • ATR ${passFail(checks.atr)}${c.step9?.reason ? ` — ${esc(c.step9.reason)}` : ''}`;
+    const trigger=`${esc(c.step10?.status || '—')}${c.step10?.reason ? ` — ${esc(c.step10.reason)}` : ''}`;
+    const rrDetail=`${rrText}${c.priceLocation?.verdict ? ` • ${esc(c.priceLocation.verdict)}` : ''}`;
+    const decision=c.decision || {};
+    const finalExtras=[];
+    if (Array.isArray(decision.coreCautions) && decision.coreCautions.length) finalExtras.push(`Caution: ${decision.coreCautions.map(esc).join('; ')}`);
+    if (Array.isArray(decision.softWarnings) && decision.softWarnings.length) finalExtras.push(`Info: ${decision.softWarnings.map(esc).join('; ')}`);
+    const final=`${esc(r?.result || '—')}${finalExtras.length ? ` — ${finalExtras.join(' | ')}` : ''}`;
+
+    if (isRangeBreakoutCandidate(r)) {
+      return [
+        ['Period', `${esc(r.period || '—')} • ${esc(r.interval || '—')} candles`],
+        ['Range', `Low ${esc(finite(r.rangeLow) ? Number(r.rangeLow).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')} • High ${esc(finite(r.rangeHigh) ? Number(r.rangeHigh).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')} • Width ${finite(r.rangeWidthPct) ? num(r.rangeWidthPct,2) + '%' : '—'}`],
+        ['Range Quality', `Bars ${esc(r.rangeBars ?? '—')} • High touches ${esc(r.highTouches ?? '—')} • Low touches ${esc(r.lowTouches ?? '—')} • slope ${finite(r.rangeSlopePct) ? num(r.rangeSlopePct,2) + '%' : '—'}`],
+        ['Breakout Level', esc(finite(r.breakoutLevel) ? Number(r.breakoutLevel).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')],
+        ['Current Price', `${esc(finite(r.currentPrice) ? Number(r.currentPrice).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')} • above RangeHigh ${finite(r.breakoutPctAboveRangeHigh) ? num(r.breakoutPctAboveRangeHigh,2) + '%' : '—'}`],
+        ['No Chase Ceiling', esc(finite(r.maxSelectPrice) ? Number(r.maxSelectPrice).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')],
+        ['ATR / Buffer', `${esc(finite(r.atr) ? Number(r.atr).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')} • buffer ${esc(finite(r.breakoutBuffer) ? Number(r.breakoutBuffer).toLocaleString('en-US',{maximumFractionDigits:10}) : '—')}`],
+        ['Volume', finite(r.volumeRatio) ? `RVOL ${num(r.volumeRatio,2)}x` : '—'],
+        ['Final Result', esc(r.result || '—')]
+      ];
+    }
+
+    if (r?.regime1h && !r?.chartAnalysis) {
+      const q=r.quality5m || {};
+      const dirs=r.liveDirection || {};
+      return [
+        ['Fast Event', `${pct(r.fastChangePct)}${finite(r.eventDetectedTime) ? ` • ${when(r.eventDetectedTime)}` : ''}`],
+        ['1h Regime', esc(r.regime1h || '—')],
+        ['4h Relative Strength', r.relativeStrength4h ? `${pct(r.relativeStrength4h.coinReturnPct)} coin • ${pct(r.relativeStrength4h.btcReturnPct)} BTC • fark ${pct(r.relativeStrength4h.rsDifferencePctPoints)}` : '—'],
+        ['15m Setup', esc(r.setupFamily || '—')],
+        ['5m Quality', finite(q.count) ? `${q.count}/3` : '—'],
+        ['No Chase', finite(r.valueDistanceAtr15) ? `${num(r.valueDistanceAtr15,2)} ATR` : '—'],
+        ['Live Direction', `15m ${esc(dirs.m15 || '—')} • 5m ${esc(dirs.m5 || '—')} • 3m ${esc(dirs.m3 || '—')}`],
+        ['Final Result', esc(r.result || '—')]
+      ];
+    }
+
+    if (isBookScanCandidate(r)) {
+      const move=c.moveLifecycle || {};
+      const moveText=`${esc(move.phase || '—')}${finite(move.moveAgeMin) ? ` • age ${num(move.moveAgeMin,1)}m` : ''}${move.reason ? ` — ${esc(move.reason)}` : ''}`;
+      const vol = c.step9?.volumeRatio;
+      const volumeText = finite(vol)
+        ? `RVOL ${num(vol,2)}x${c.step9?.volumeConfirmed===true ? ' • CONFIRMED' : c.step9?.volumeWeak ? ' • WEAK' : ' • NEUTRAL'}`
+        : (c.step9?.reason ? esc(c.step9.reason) : '—');
+      return [
+        ['Fast Event',fast],
+        ['Liquidity',liquidity],
+        ['OI',oi],
+        ['Book Move',moveText],
+        ['1h Context',oneHour],
+        ['15m Structure / Setup',setup],
+        ['5m Trigger',confirm],
+        ['Volume',volumeText],
+        ['No Chase',trigger],
+        ['R/R',rrDetail],
+        ['Final Result',final]
+      ];
+    }
+
+    const fresh=`Freshness ${esc(c.entryFreshness?.status || r?.entryFreshness?.status || '—')}${(c.entryFreshness?.reason || r?.entryFreshness?.reason) ? ` — ${esc(c.entryFreshness?.reason || r.entryFreshness.reason)}` : ''} | Elder ${esc(c.entryImpulse?.status || r?.entryImpulse?.status || '—')}${(c.entryImpulse?.reason || r?.entryImpulse?.reason) ? ` — ${esc(c.entryImpulse?.reason || r.entryImpulse.reason)}` : ''}`;
+    return [
+      ['Fast Event',fast],['Liquidity',liquidity],['OI',oi],['1h',oneHour],['Freshness / Elder',fresh],
+      ['15m Setup',setup],['5m Confirm',confirm],['Trigger / Zone',trigger],['R/R',rrDetail],['Final Result',final]
+    ];
+  }
+
+  function openResult(tr, resultText){
+    const symbol=tr.dataset.symbol || 'Coin';
+    const r=currentCandidate(symbol);
+    const m=rowMeta(tr);
+    modalTitle.textContent=`${symbol} — ${resultText}`;
+    const rows=flowRows(r);
+    const reason=tr.querySelector('.reasonText')?.getAttribute('title') || tr.querySelector('.reasonText')?.textContent || '';
+    modalBody.innerHTML=`
+      <div class="resultModalMeta">
+        <div class="resultMetaRow"><strong>24h Volume:</strong> ${esc(m.volume)}</div>
+        <div class="resultMetaRow"><strong>Total Supply:</strong> ${esc(m.total)}</div>
+        <div class="resultMetaRow"><strong>Circulating Supply:</strong> ${esc(m.circ)}</div>
+        <div class="resultMetaRow"><strong>Age:</strong> ${esc(m.age)}</div>
+        <div class="resultMetaRow"><strong>Max:</strong> ${esc(m.max)}</div>
+        <div class="resultMetaRow"><strong>Min:</strong> ${esc(m.min)}</div>
+      </div>
+      <div class="resultStopped"><strong>Stopped At:</strong> ${esc(stoppedAt(r))}</div>
+      <div class="resultFlow">${rows.map(([step,value],i)=>`<div class="resultFlowRow${i===rows.length-1?' finalRow':''}"><div class="flowStep">${esc(step)}</div><div class="flowValue">${value}</div></div>`).join('')}</div>
+      ${reason ? `<div class="resultInfo"><strong>Reason:</strong> ${esc(reason)}</div>` : ''}
+    `;
+    modal.hidden=false;
+    modal.setAttribute('aria-hidden','false');
+    document.body.style.overflow='hidden';
+    closeButton.focus();
+  }
+
+  function closeResult(){
+    modal.hidden=true;
+    modal.setAttribute('aria-hidden','true');
+    document.body.style.overflow='';
+  }
+
+  function updateCandidateTitle(){
+    const normal=window.CryptoOfferData?.scanState;
+    const short=window.CryptoOfferData?.shortScanState;
+    const book=window.CryptoOfferData?.bookScanState;
+    const coin=window.CryptoOfferData?.coinScanState;
+    const coinShort=window.CryptoOfferData?.coinScanForShortState;
+    const range=window.CryptoOfferData?.rangeBreakoutState;
+    const latest=[normal,short,book,coin,coinShort,range].filter(Boolean).sort((a,b)=>(Number(b?.startedAt)||0)-(Number(a?.startedAt)||0))[0];
+    const rows=latest?.results;
+    let stamp=Array.isArray(rows) ? rows.find(r=>r?.gridMeta?.requestTime)?.gridMeta?.requestTime : null;
+    if (!stamp) {
+      const started=latest?.startedAt;
+      if (finite(started) && Number(started)>0) stamp=new Intl.DateTimeFormat('tr-TR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(Number(started)));
+    }
+    const match=String(stamp||'').match(/(\d{2}:\d{2})/);
+    const source=latest===range ? `Range Scan${range?.periodLabel ? ` ${range.periodLabel}` : ''}` : latest===coinShort ? 'CoinScanForShort' : latest===coin ? 'CoinScan' : latest===short ? 'StartScanForShort' : latest===book ? 'Book Scan' : 'Candidate Response';
+    title.textContent=match ? `${source} - ${match[1]}` : source;
+  }
+
+  function enhance(){
+    body.querySelectorAll('.pill.select,.pill.caution').forEach(pill=>{
+      pill.setAttribute('role','button');pill.setAttribute('tabindex','0');pill.setAttribute('title','Detay için tıkla');
+      pill.style.pointerEvents='auto';
+    });
+    body.querySelectorAll('tr[data-symbol]').forEach(tr=>{
+      const followBtn=tr.querySelector('[data-action="follow"]');
+      const followActive=!!followBtn && /Stop Follow|Follow Again/i.test(followBtn.textContent||'');
+      if(!followActive)return;
+      tr.removeAttribute('inert');
+      tr.style.pointerEvents='auto';
+      const symbolBtn=tr.querySelector('.symbolBtn[data-action="decision-support"]');
+      const loading=tr.querySelector('[data-role="price-level"]')?.classList.contains('loading') || tr.querySelector('[data-role="risk-level"]')?.classList.contains('loading');
+      if(symbolBtn){symbolBtn.style.pointerEvents='auto';if(!loading)symbolBtn.disabled=false;}
+    });
+    body.querySelectorAll('td.empty').forEach(td=>td.colSpan=15);
+    updateCandidateTitle();
+  }
+
+  body.addEventListener('click',e=>{
+    const pill=e.target.closest('.pill.select,.pill.caution');
+    if(!pill || !body.contains(pill)) return;
+    const tr=pill.closest('tr[data-symbol]');if(!tr)return;
+    openResult(tr,pill.textContent.trim());
+  },true);
+  body.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    const pill=e.target.closest('.pill.select,.pill.caution');if(!pill)return;
+    e.preventDefault();
+    const tr=pill.closest('tr[data-symbol]');if(tr)openResult(tr,pill.textContent.trim());
+  });
+  closeButton.addEventListener('click',closeResult);
+  modal.addEventListener('click',e=>{if(e.target===modal)closeResult();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeResult();});
+
+  const observer=new MutationObserver(enhance);
+  observer.observe(body,{childList:true,subtree:true,characterData:true});
+  enhance();
+})();
+</script>
+
+
+<div id="reportModal" class="reportModal" hidden aria-hidden="true">
+  <section class="reportModalPanel" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+    <div class="reportModalHeader">
+      <h2 id="reportModalTitle">Start Scan Report</h2>
+      <button id="reportModalClose" class="reportModalClose" type="button" aria-label="Kapat">×</button>
+    </div>
+    <div class="reportModalBody">
+      <div class="reportMeta">
+        <span id="reportCount">0 records</span>
+        <span>Click = primary sort • Shift+Click = multi-column sort</span>
+      </div>
+      <div class="reportTableWrap">
+        <table id="reportTable">
+          <thead>
+            <tr>
+              <th data-sort="start_scan_date">StartScan Date <span class="sortMark"></span></th>
+              <th data-sort="binance_time">Hour <span class="sortMark"></span></th>
+              <th data-sort="sec">Sec. <span class="sortMark"></span></th>
+              <th data-sort="min_y">MinY% <span class="sortMark"></span></th>
+              <th data-sort="max_y">MaxY% <span class="sortMark"></span></th>
+              <th data-sort="select_coins">Select Coins <span class="sortMark"></span></th>
+            </tr>
+          </thead>
+          <tbody id="reportBody"><tr><td colspan="6" class="reportEmpty">No records.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="followReportModal" class="reportModal" hidden aria-hidden="true">
+  <section class="reportModalPanel" role="dialog" aria-modal="true" aria-labelledby="followReportModalTitle">
+    <div class="reportModalHeader">
+      <h2 id="followReportModalTitle">Follow Report</h2>
+      <button id="followReportModalClose" class="reportModalClose" type="button" aria-label="Kapat">×</button>
+    </div>
+    <div class="reportModalBody">
+      <div class="reportMeta">
+        <span id="followReportCount">0 records</span>
+        <span>Click = primary sort • Shift+Click = multi-column sort</span>
+      </div>
+      <div class="reportTableWrap">
+        <table id="followReportTable">
+          <thead>
+            <tr>
+              <th data-sort="follow_date">Date <span class="sortMark"></span></th>
+              <th data-sort="follow_time">Hour <span class="sortMark"></span></th>
+              <th data-sort="coin">Coin <span class="sortMark"></span></th>
+              <th data-sort="entry_price">EntryPrice <span class="sortMark"></span></th>
+              <th data-sort="stop_price">StopPrice <span class="sortMark"></span></th>
+              <th data-sort="profit_pct">Profit <span class="sortMark"></span></th>
+              <th data-sort="follow_start_time">FollowStart <span class="sortMark"></span></th>
+              <th data-sort="follow_end_time">FollowEnd <span class="sortMark"></span></th>
+              <th data-sort="follow_duration_sec">Duration <span class="sortMark"></span></th>
+              <th data-sort="reason">Reason <span class="sortMark"></span></th>
+            </tr>
+          </thead>
+          <tbody id="followReportBody"><tr><td colspan="10" class="reportEmpty">No records.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer class="appBottomBar">Not investment advice.</footer>
+
+</body>
+</html>

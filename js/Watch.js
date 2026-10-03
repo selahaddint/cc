@@ -353,20 +353,67 @@
     const atr5 = atr(c5, 14);
     const lows5 = pivots(c5, 'low');
     const highs5 = pivots(c5, 'high');
-    const hlLow = last(lows5);
-    const prevHlLow = lows5[lows5.length - 2];
-    const hasHL5 = !!(hlLow && prevHlLow && hlLow.value > prevHlLow.value + (Number.isFinite(atr5) ? atr5 * 0.02 : 0));
-    const hlRecent = !!(hlLow && hlLow.index >= c5.length - 11);
-    const peakBeforeHL = hlLow ? last(highs5.filter(h => h.index < hlLow.index)) : null;
-    const fallbackHigh = hlLow
-      ? maxHigh(c5.slice(Math.max(0, hlLow.index - 10), hlLow.index + 1))
+
+    // Confirmed HL is kept for structure protection / RED decisions.
+    // pivots(..., right=2) deliberately waits for two candles on the right.
+    const confirmedHlLow = last(lows5);
+    const prevConfirmedHlLow = lows5[lows5.length - 2];
+    const hasConfirmedHL5 = !!(
+      confirmedHlLow
+      && prevConfirmedHlLow
+      && confirmedHlLow.value > prevConfirmedHlLow.value + (Number.isFinite(atr5) ? atr5 * 0.02 : 0)
+    );
+    const confirmedHlRecent = !!(confirmedHlLow && confirmedHlLow.index >= c5.length - 11);
+
+    // ENTRY timing must not wait another two 5m candles. At every 5m close,
+    // treat the latest closed candle's low as a candidate HL when it remains
+    // above the latest confirmed structural low. The later 1m breakout/momentum
+    // trigger is the confirmation that price has actually started to accelerate up.
+    const candidateIndex5 = c5.length - 1;
+    const candidateBar5 = last(c5);
+    const candidateBaseLow5 = confirmedHlLow;
+    const candidateTolerance5 = Number.isFinite(atr5) ? atr5 * 0.02 : 0;
+    const candidateHL5 = !!(
+      candidateBar5
+      && candidateBaseLow5
+      && candidateBar5.low > candidateBaseLow5.value + candidateTolerance5
+    ) ? {
+      index: candidateIndex5,
+      value: candidateBar5.low,
+      time: candidateBar5.closeTime,
+      candidate: true
+    } : null;
+
+    const candidateIntact5 = !!(
+      candidateHL5
+      && Number.isFinite(atr5)
+      && currentPrice >= candidateHL5.value - atr5 * 0.08
+    );
+
+    // Candidate HL has priority for ENTRY timing because it is the freshest closed
+    // 5m information. If it is not available/intact, fall back to confirmed HL.
+    const entryHlLow = candidateIntact5
+      ? candidateHL5
+      : (hasConfirmedHL5 ? confirmedHlLow : null);
+    const hasHL5 = !!entryHlLow;
+    const hlRecent = !!entryHlLow && (entryHlLow.candidate || confirmedHlRecent);
+
+    const peakBeforeHL = entryHlLow ? last(highs5.filter(h => h.index < entryHlLow.index)) : null;
+    const fallbackHigh = entryHlLow
+      ? maxHigh(c5.slice(Math.max(0, entryHlLow.index - 10), entryHlLow.index + 1))
       : maxHigh(c5.slice(-12));
     const peak = peakBeforeHL?.value ?? fallbackHigh;
-    const pullbackAtr = Number.isFinite(atr5) && atr5 > 0 && hlLow && Number.isFinite(peak)
-      ? (peak - hlLow.value) / atr5
+    const pullbackAtr = Number.isFinite(atr5) && atr5 > 0 && entryHlLow && Number.isFinite(peak)
+      ? (peak - entryHlLow.value) / atr5
       : NaN;
     const pullbackSeen = Number.isFinite(pullbackAtr) && pullbackAtr >= 0.25 && pullbackAtr <= 3.0;
-    const breakHL5 = !!(hlLow && Number.isFinite(atr5) && currentPrice < hlLow.value - atr5 * 0.08);
+
+    // Structural RED still uses only the confirmed pivot low, not the candidate HL.
+    const breakHL5 = !!(
+      confirmedHlLow
+      && Number.isFinite(atr5)
+      && currentPrice < confirmedHlLow.value - atr5 * 0.08
+    );
     const reclaim5 = currentPrice >= ema20_5;
 
     if (breakHL5) {
@@ -395,7 +442,7 @@
     const trigger1 = breakout1 && momentum1;
 
     // Do not light GREEN after price has already run too far away from the HL/value area.
-    const fromHlAtr = hlLow && Number.isFinite(atr5) && atr5 > 0 ? (currentPrice - hlLow.value) / atr5 : Infinity;
+    const fromHlAtr = entryHlLow && Number.isFinite(atr5) && atr5 > 0 ? (currentPrice - entryHlLow.value) / atr5 : Infinity;
     const fromEmaAtr = Number.isFinite(atr5) && atr5 > 0 ? (currentPrice - ema20_5) / atr5 : Infinity;
     const noChase = fromHlAtr >= 0 && fromHlAtr <= 1.60 && fromEmaAtr <= 0.90;
 
@@ -403,10 +450,10 @@
       return {
         status: 'GREEN',
         label: 'ENTRY',
-        reason: `LONG timing hazır: 15m yapı uygun • 5m HL/pullback tamam • 1m yukarı trigger aktif • uzama ${fromHlAtr.toFixed(2)} ATR.`,
+        reason: `LONG timing hazır: 15m yapı uygun • 5m ${entryHlLow?.candidate ? 'candidate HL' : 'confirmed HL'}/pullback tamam • 1m yukarı trigger aktif • uzama ${fromHlAtr.toFixed(2)} ATR.`,
         at: now(),
         price: currentPrice,
-        metrics: { pullbackAtr, fromHlAtr, fromEmaAtr }
+        metrics: { pullbackAtr, fromHlAtr, fromEmaAtr, hlType: entryHlLow?.candidate ? 'candidate' : 'confirmed' }
       };
     }
 
@@ -426,7 +473,8 @@
       metrics: {
         pullbackAtr: Number.isFinite(pullbackAtr) ? pullbackAtr : null,
         fromHlAtr: Number.isFinite(fromHlAtr) ? fromHlAtr : null,
-        fromEmaAtr: Number.isFinite(fromEmaAtr) ? fromEmaAtr : null
+        fromEmaAtr: Number.isFinite(fromEmaAtr) ? fromEmaAtr : null,
+        hlType: entryHlLow?.candidate ? 'candidate' : (entryHlLow ? 'confirmed' : null)
       }
     };
   }

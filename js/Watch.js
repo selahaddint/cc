@@ -5,9 +5,8 @@
  *   - Reads SELECT rows already present in #candidateBody.
  *   - Does NOT select coins and does NOT modify scanner logic.
  *   - Does NOT modify Follow state, inputs, buttons, timers or decisions.
- *   - Always evaluates LONG entry timing, regardless of which scanner
- *     produced the SELECT row (including scanners whose source strategy
- *     was SHORT).
+ *   - Assumes the SELECT stage already handled higher-timeframe direction/context.
+ *   - Watch itself only handles short-term LONG entry timing with 3m + 1m.
  *
  * Signal meaning:
  *   GREEN  / ENTRY    -> LONG entry timing is currently ready.
@@ -15,7 +14,7 @@
  *   RED    / NO ENTRY -> Current LONG structure is invalid / actively bearish.
  *
  * Public REST usage is intentionally cached:
- *   1m refresh ~15s, 5m ~45s, 15m ~90s.
+ *   1m refresh ~15s, 3m ~30s.
  */
 (() => {
   'use strict';
@@ -24,9 +23,9 @@
     cycleMs: 15000,
     requestTimeoutMs: 9000,
     concurrency: 4,
-    cacheTtl: Object.freeze({ '1m': 12000, '5m': 45000, '15m': 90000 }),
-    limits: Object.freeze({ '1m': 80, '5m': 90, '15m': 90 }),
-    minClosedBars: Object.freeze({ '1m': 45, '5m': 55, '15m': 55 }),
+    cacheTtl: Object.freeze({ '1m': 12000, '3m': 30000 }),
+    limits: Object.freeze({ '1m': 80, '3m': 90 }),
+    minClosedBars: Object.freeze({ '1m': 45, '3m': 55 }),
     cooldownDefaultMs: 120000,
     endpoint: 'https://fapi.binance.com/fapi/v1/klines'
   });
@@ -291,16 +290,17 @@
   }
 
   async function evaluate(symbol, signal) {
-    const [bars15, bars5, bars1] = await Promise.all([
-      fetchKlines(symbol, '15m', signal),
-      fetchKlines(symbol, '5m', signal),
+    const [bars3, bars1] = await Promise.all([
+      fetchKlines(symbol, '3m', signal),
       fetchKlines(symbol, '1m', signal)
     ]);
 
-    const c15 = closedBars(bars15);
-    const c5 = closedBars(bars5);
+    const c3 = closedBars(bars3);
     const c1 = closedBars(bars1);
-    if (c15.length < CONFIG.minClosedBars['15m'] || c5.length < CONFIG.minClosedBars['5m'] || c1.length < CONFIG.minClosedBars['1m']) {
+    if (
+      c3.length < CONFIG.minClosedBars['3m']
+      || c1.length < CONFIG.minClosedBars['1m']
+    ) {
       return { status: 'YELLOW', label: 'WAIT', reason: 'Yeterli kapanmış mum verisi henüz yok.', at: now() };
     }
 
@@ -310,121 +310,83 @@
       return { status: 'YELLOW', label: 'WAIT', reason: 'Anlık fiyat okunamadı.', at: now() };
     }
 
-    // ---------- 15m LONG context ----------
-    const closes15 = c15.map(b => b.close);
-    const ema20_15s = emaSeries(closes15, 20);
-    const ema50_15s = emaSeries(closes15, 50);
-    const macd15 = macd(closes15);
-    const atr15 = atr(c15, 14);
-    const ema20_15 = last(ema20_15s);
-    const ema50_15 = last(ema50_15s);
-    const ema20_15_prev = ema20_15s[Math.max(0, ema20_15s.length - 4)];
-    const close15 = last(c15).close;
-    const hist15 = last(macd15.hist);
-    const hist15Prev = macd15.hist[macd15.hist.length - 2];
-    const lows15 = pivots(c15, 'low');
-    const lastLow15 = last(lows15);
-    const prevLow15 = lows15[lows15.length - 2];
-    const hl15 = !!(lastLow15 && prevLow15 && lastLow15.value > prevLow15.value);
-    const emaSlope15Up = ema20_15 > ema20_15_prev;
-    const emaSlope15Down = ema20_15 < ema20_15_prev;
-    const hardBreak15 = !!(lastLow15 && Number.isFinite(atr15) && close15 < lastLow15.value - atr15 * 0.08);
-    const strongBear15 = ema20_15 < ema50_15 && emaSlope15Down && close15 < ema20_15 && hist15 < 0 && hist15 <= hist15Prev;
-    const bullish15 = ema20_15 > ema50_15 && emaSlope15Up && close15 > ema20_15;
-    const transition15 = hl15 && emaSlope15Up && close15 >= ema20_15 * 0.998 && hist15 > hist15Prev;
-    const longContext15 = bullish15 || transition15;
+    // ---------- 3m structure + pullback + candidate HL + EMA20 reclaim ----------
+    // Higher-timeframe direction/context is assumed to have been validated by SELECT.
+    // Watch therefore uses 3m as its complete setup/timing layer.
+    const closes3 = c3.map(b => b.close);
+    const ema20_3s = emaSeries(closes3, 20);
+    const ema20_3 = last(ema20_3s);
+    const atr3 = atr(c3, 14);
+    const lows3 = pivots(c3, 'low');
+    const highs3 = pivots(c3, 'high');
 
-    if (hardBreak15 || strongBear15) {
+    // Confirmed 3m pivot lows remain the structural safety reference.
+    // If price breaks the latest confirmed structural low, do not allow LONG entry.
+    const confirmedHlLow3 = last(lows3);
+    const breakStructure3 = !!(
+      confirmedHlLow3
+      && Number.isFinite(atr3)
+      && currentPrice < confirmedHlLow3.value - atr3 * 0.08
+    );
+
+    if (breakStructure3) {
       return {
         status: 'RED',
         label: 'NO ENTRY',
-        reason: hardBreak15
-          ? '15m LONG yapısı kırılmış durumda; yeni yapı kurulmadan giriş yok.'
-          : '15m EMA/MACD yapısı aktif olarak aşağı yönlü; LONG giriş yok.',
+        reason: '3m yapısal dip aşağı kırıldı; yeni yapı kurulmadan LONG giriş yok.',
         at: now(),
         price: currentPrice
       };
     }
 
-    // ---------- 5m pullback + HL ----------
-    const closes5 = c5.map(b => b.close);
-    const ema20_5s = emaSeries(closes5, 20);
-    const ema20_5 = last(ema20_5s);
-    const atr5 = atr(c5, 14);
-    const lows5 = pivots(c5, 'low');
-    const highs5 = pivots(c5, 'high');
-
-    // Confirmed HL is kept for structure protection / RED decisions.
-    // pivots(..., right=2) deliberately waits for two candles on the right.
-    const confirmedHlLow = last(lows5);
-    const prevConfirmedHlLow = lows5[lows5.length - 2];
-    const hasConfirmedHL5 = !!(
-      confirmedHlLow
-      && prevConfirmedHlLow
-      && confirmedHlLow.value > prevConfirmedHlLow.value + (Number.isFinite(atr5) ? atr5 * 0.02 : 0)
+    // Confirmed 3m HL remains available as a fallback. For entry timing, the
+    // latest CLOSED 3m candle is treated as a candidate HL when its low remains
+    // above the latest confirmed structural low. This avoids waiting for two
+    // future 3m candles before Watch can react.
+    const prevConfirmedHlLow3 = lows3[lows3.length - 2];
+    const hasConfirmedHL3 = !!(
+      confirmedHlLow3
+      && prevConfirmedHlLow3
+      && confirmedHlLow3.value > prevConfirmedHlLow3.value + (Number.isFinite(atr3) ? atr3 * 0.02 : 0)
     );
-    const confirmedHlRecent = !!(confirmedHlLow && confirmedHlLow.index >= c5.length - 11);
+    const confirmedHlRecent3 = !!(confirmedHlLow3 && confirmedHlLow3.index >= c3.length - 14);
 
-    // ENTRY timing must not wait another two 5m candles. At every 5m close,
-    // treat the latest closed candle's low as a candidate HL when it remains
-    // above the latest confirmed structural low. The later 1m breakout/momentum
-    // trigger is the confirmation that price has actually started to accelerate up.
-    const candidateIndex5 = c5.length - 1;
-    const candidateBar5 = last(c5);
-    const candidateBaseLow5 = confirmedHlLow;
-    const candidateTolerance5 = Number.isFinite(atr5) ? atr5 * 0.02 : 0;
-    const candidateHL5 = !!(
-      candidateBar5
-      && candidateBaseLow5
-      && candidateBar5.low > candidateBaseLow5.value + candidateTolerance5
+    const candidateIndex3 = c3.length - 1;
+    const candidateBar3 = last(c3);
+    const candidateTolerance3 = Number.isFinite(atr3) ? atr3 * 0.02 : 0;
+    const candidateHL3 = !!(
+      candidateBar3
+      && confirmedHlLow3
+      && candidateBar3.low > confirmedHlLow3.value + candidateTolerance3
     ) ? {
-      index: candidateIndex5,
-      value: candidateBar5.low,
-      time: candidateBar5.closeTime,
+      index: candidateIndex3,
+      value: candidateBar3.low,
+      time: candidateBar3.closeTime,
       candidate: true
     } : null;
 
-    const candidateIntact5 = !!(
-      candidateHL5
-      && Number.isFinite(atr5)
-      && currentPrice >= candidateHL5.value - atr5 * 0.08
+    const candidateIntact3 = !!(
+      candidateHL3
+      && Number.isFinite(atr3)
+      && currentPrice >= candidateHL3.value - atr3 * 0.08
     );
 
-    // Candidate HL has priority for ENTRY timing because it is the freshest closed
-    // 5m information. If it is not available/intact, fall back to confirmed HL.
-    const entryHlLow = candidateIntact5
-      ? candidateHL5
-      : (hasConfirmedHL5 ? confirmedHlLow : null);
-    const hasHL5 = !!entryHlLow;
-    const hlRecent = !!entryHlLow && (entryHlLow.candidate || confirmedHlRecent);
+    const entryHlLow3 = candidateIntact3
+      ? candidateHL3
+      : (hasConfirmedHL3 ? confirmedHlLow3 : null);
+    const hasHL3 = !!entryHlLow3;
+    const hlRecent3 = !!entryHlLow3 && (entryHlLow3.candidate || confirmedHlRecent3);
 
-    const peakBeforeHL = entryHlLow ? last(highs5.filter(h => h.index < entryHlLow.index)) : null;
-    const fallbackHigh = entryHlLow
-      ? maxHigh(c5.slice(Math.max(0, entryHlLow.index - 10), entryHlLow.index + 1))
-      : maxHigh(c5.slice(-12));
-    const peak = peakBeforeHL?.value ?? fallbackHigh;
-    const pullbackAtr = Number.isFinite(atr5) && atr5 > 0 && entryHlLow && Number.isFinite(peak)
-      ? (peak - entryHlLow.value) / atr5
+    const peakBeforeHL3 = entryHlLow3 ? last(highs3.filter(h => h.index < entryHlLow3.index)) : null;
+    const fallbackHigh3 = entryHlLow3
+      ? maxHigh(c3.slice(Math.max(0, entryHlLow3.index - 14), entryHlLow3.index + 1))
+      : maxHigh(c3.slice(-16));
+    const peak3 = peakBeforeHL3?.value ?? fallbackHigh3;
+    const pullbackAtr3 = Number.isFinite(atr3) && atr3 > 0 && entryHlLow3 && Number.isFinite(peak3)
+      ? (peak3 - entryHlLow3.value) / atr3
       : NaN;
-    const pullbackSeen = Number.isFinite(pullbackAtr) && pullbackAtr >= 0.25 && pullbackAtr <= 3.0;
-
-    // Structural RED still uses only the confirmed pivot low, not the candidate HL.
-    const breakHL5 = !!(
-      confirmedHlLow
-      && Number.isFinite(atr5)
-      && currentPrice < confirmedHlLow.value - atr5 * 0.08
-    );
-    const reclaim5 = currentPrice >= ema20_5;
-
-    if (breakHL5) {
-      return {
-        status: 'RED',
-        label: 'NO ENTRY',
-        reason: '5m son HL aşağı kırıldı; yeni pullback/HL yapısı kurulmadan LONG giriş yok.',
-        at: now(),
-        price: currentPrice
-      };
-    }
+    const pullbackSeen3 = Number.isFinite(pullbackAtr3) && pullbackAtr3 >= 0.25 && pullbackAtr3 <= 3.0;
+    const reclaim3 = currentPrice >= ema20_3;
 
     // ---------- 1m live re-acceleration trigger ----------
     const closes1Live = c1.map(b => b.close);
@@ -441,28 +403,38 @@
     const momentum1 = ema9_1 > ema20_1 && (hist1 > 0 || hist1 > hist1Prev);
     const trigger1 = breakout1 && momentum1;
 
-    // Do not light GREEN after price has already run too far away from the HL/value area.
-    const fromHlAtr = entryHlLow && Number.isFinite(atr5) && atr5 > 0 ? (currentPrice - entryHlLow.value) / atr5 : Infinity;
-    const fromEmaAtr = Number.isFinite(atr5) && atr5 > 0 ? (currentPrice - ema20_5) / atr5 : Infinity;
-    const noChase = fromHlAtr >= 0 && fromHlAtr <= 1.60 && fromEmaAtr <= 0.90;
+    // Do not light GREEN after price has already run too far away from the 3m
+    // HL/value area. noChase is measured entirely in ATR3.
+    const fromHlAtr3 = entryHlLow3 && Number.isFinite(atr3) && atr3 > 0
+      ? (currentPrice - entryHlLow3.value) / atr3
+      : Infinity;
+    const fromEmaAtr3 = Number.isFinite(atr3) && atr3 > 0
+      ? (currentPrice - ema20_3) / atr3
+      : Infinity;
+    const noChase3 = fromHlAtr3 >= 0 && fromHlAtr3 <= 1.60 && fromEmaAtr3 <= 0.90;
 
-    if (longContext15 && hasHL5 && hlRecent && pullbackSeen && reclaim5 && trigger1 && noChase) {
+    if (hasHL3 && hlRecent3 && pullbackSeen3 && reclaim3 && trigger1 && noChase3) {
       return {
         status: 'GREEN',
         label: 'ENTRY',
-        reason: `LONG timing hazır: 15m yapı uygun • 5m ${entryHlLow?.candidate ? 'candidate HL' : 'confirmed HL'}/pullback tamam • 1m yukarı trigger aktif • uzama ${fromHlAtr.toFixed(2)} ATR.`,
+        reason: `LONG timing hazır: 3m ${entryHlLow3?.candidate ? 'candidate HL' : 'confirmed HL'}/pullback + EMA20 uygun • 1m yukarı trigger aktif • uzama ${fromHlAtr3.toFixed(2)} ATR.`,
         at: now(),
         price: currentPrice,
-        metrics: { pullbackAtr, fromHlAtr, fromEmaAtr, hlType: entryHlLow?.candidate ? 'candidate' : 'confirmed' }
+        metrics: {
+          pullbackAtr: pullbackAtr3,
+          fromHlAtr: fromHlAtr3,
+          fromEmaAtr: fromEmaAtr3,
+          hlType: entryHlLow3?.candidate ? 'candidate' : 'confirmed',
+          timingTf: '3m'
+        }
       };
     }
 
     const waits = [];
-    if (!longContext15) waits.push('15m LONG dönüş/trend teyidi');
-    if (!hasHL5 || !hlRecent || !pullbackSeen) waits.push('5m güncel pullback + HL');
-    if (hasHL5 && hlRecent && pullbackSeen && !reclaim5) waits.push('5m EMA20 geri alımı');
-    if (longContext15 && hasHL5 && hlRecent && pullbackSeen && reclaim5 && !trigger1) waits.push('1m yeniden yukarı kırılım');
-    if (!noChase && hasHL5 && hlRecent) waits.push('yeni pullback (hareket uzamış)');
+    if (!hasHL3 || !hlRecent3 || !pullbackSeen3) waits.push('3m güncel pullback + HL');
+    if (hasHL3 && hlRecent3 && pullbackSeen3 && !reclaim3) waits.push('3m EMA20 geri alımı');
+    if (hasHL3 && hlRecent3 && pullbackSeen3 && reclaim3 && !trigger1) waits.push('1m yeniden yukarı kırılım');
+    if (!noChase3 && hasHL3 && hlRecent3) waits.push('yeni 3m pullback (hareket uzamış)');
 
     return {
       status: 'YELLOW',
@@ -471,10 +443,11 @@
       at: now(),
       price: currentPrice,
       metrics: {
-        pullbackAtr: Number.isFinite(pullbackAtr) ? pullbackAtr : null,
-        fromHlAtr: Number.isFinite(fromHlAtr) ? fromHlAtr : null,
-        fromEmaAtr: Number.isFinite(fromEmaAtr) ? fromEmaAtr : null,
-        hlType: entryHlLow?.candidate ? 'candidate' : (entryHlLow ? 'confirmed' : null)
+        pullbackAtr: Number.isFinite(pullbackAtr3) ? pullbackAtr3 : null,
+        fromHlAtr: Number.isFinite(fromHlAtr3) ? fromHlAtr3 : null,
+        fromEmaAtr: Number.isFinite(fromEmaAtr3) ? fromEmaAtr3 : null,
+        hlType: entryHlLow3?.candidate ? 'candidate' : (entryHlLow3 ? 'confirmed' : null),
+        timingTf: '3m'
       }
     };
   }

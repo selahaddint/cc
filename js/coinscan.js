@@ -549,12 +549,22 @@
 
   async function getUniverse(signal) {
     const info = await api('/fapi/v1/exchangeInfo', {}, signal);
+
+    // Coin universe pre-filter only.
+    // IMPORTANT: CoinScan LONG selection rules and thresholds are unchanged.
+    if (!window.CoinUniverse?.getAllowedCoins) {
+      throw new Error('CoinUniverse.js yüklenmedi. index.html içinde coinscan.js dosyasından önce yüklenmeli.');
+    }
+    const allowedCoins = await window.CoinUniverse.getAllowedCoins();
+
     const symbols = info.symbols
       .filter((s) => s.status === 'TRADING')
       .filter((s) => s.quoteAsset === RULES.quoteAsset && s.marginAsset === RULES.marginAsset)
       .filter((s) => s.contractType === 'PERPETUAL')
       .filter((s) => !STABLE_BASE_ASSETS.has(s.baseAsset))
-      .map((s) => s.symbol);
+      .map((s) => s.symbol)
+      .filter((symbol) => allowedCoins.has(symbol));
+
     return { symbols, set: new Set(symbols), serverTime: Number(info.serverTime) || null };
   }
 

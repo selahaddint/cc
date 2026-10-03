@@ -322,7 +322,13 @@
     const scannerStates=[
       window.CryptoOfferData?.scanState,
       window.CryptoOfferData?.shortScanState,
-      window.CryptoOfferData?.oneMScanState
+      window.CryptoOfferData?.oneMScanState,
+      window.CryptoOfferData?.bookScanState,
+      window.CryptoOfferData?.coinScanState,
+      window.CryptoOfferData?.coinScanForShortState,
+      window.CryptoOfferData?.rangeBreakoutState,
+      window.CryptoOfferData?.squeezeLongState,
+      window.CryptoOfferData?.rangeSqueezeLongState
     ].filter(Boolean).sort((a,b)=>(Number(b?.startedAt)||0)-(Number(a?.startedAt)||0));
 
     let fromLatestScan=null;
@@ -608,6 +614,24 @@
       if(live.decision==='PROTECT')yellow.push(`Live Analysis: ${live.label}`);
       if(FOLLOW_LIVE_CONFIG.oiCizgiEnabled&&live.oiCizgi?.exit)red.push(`OICizgiAnalysis EXIT: OI USDT line DOWN + latest OI ${followCompact(live.oiCizgi.latestOi)} < previous peak ${followCompact(live.oiCizgi.previousPeakOi)}`);
 
+      // BTCImpact is an additional risk layer only. It never pushes RED/EXIT by
+      // itself, so all pre-existing Follow EXIT rules remain authoritative.
+      // If the shared module is unavailable or its request fails, Follow continues
+      // with the original rules rather than failing the whole monitor cycle.
+      if(window.BTCImpact?.analyze){
+        try{
+          const btc=await window.BTCImpact.analyze(symbol);
+          task.btcImpact=btc;
+          const btcText=window.BTCImpact.summaryText?.(btc)||`BTC ${btc.level}`;
+          if(btc.level==='STRONG_NEGATIVE')yellow.push(`BTC Impact: STRONG NEGATIVE • ${btcText}`);
+          else if(btc.level==='NEGATIVE')yellow.push(`BTC Impact: NEGATIVE • ${btcText}`);
+          else if(btc.level==='POSITIVE')info.push(`BTC Impact supportive • ${btcText}`);
+        }catch(e){
+          task.btcImpactError=String(e?.message||e);
+          followLog(`BTC Impact ${symbol}: ${e?.message||e}`);
+        }
+      }
+
       task.prevPrice=currentPrice;task.prevOi=currentOi;task.currentPrice=currentPrice;task.currentOi=currentOi;task.lastCheck=serverTime;
 
       let status='GREEN',reason='HOLD — no PROTECT / EXIT condition';
@@ -651,7 +675,7 @@
     if(!(stop<entry)){setMonitorUI(symbol,'OFF','LONG için Stop Price, Entry Price altında olmalıdır.');return;}
     const now=Date.now();
     const preservedRow=captureFollowRowModel(symbol,existing);
-    const task={symbol,entryPrice:entry,stopPrice:stop,startedAt:now,highest:entry,breakEvenArmed:false,breakEvenArmedAt:0,effectiveExitLevel:NaN,status:'GREEN',reason:'Follow starting',refreshing:false,prevPrice:NaN,prevOi:NaN,prevBasisPct:NaN,prevFundingRate:NaN,prevLiveTime:NaN,oiDeltaHistory:[],live5m:null,liveAnalysis:null,lastHL:NaN,lastHH:NaN,lastSeenLowTime:0,lastSeenHighTime:0,pendingHL:null,hlInitialized:false,tf15:null,tf5:null,tf3:null,timer:null,preservedRow};
+    const task={symbol,entryPrice:entry,stopPrice:stop,startedAt:now,highest:entry,breakEvenArmed:false,breakEvenArmedAt:0,effectiveExitLevel:NaN,status:'GREEN',reason:'Follow starting',refreshing:false,prevPrice:NaN,prevOi:NaN,prevBasisPct:NaN,prevFundingRate:NaN,prevLiveTime:NaN,oiDeltaHistory:[],live5m:null,liveAnalysis:null,btcImpact:null,btcImpactError:null,lastHL:NaN,lastHH:NaN,lastSeenLowTime:0,lastSeenHighTime:0,pendingHL:null,hlInitialized:false,tf15:null,tf5:null,tf3:null,timer:null,preservedRow};
     followMonitors.set(symbol,task);setLiveUI(symbol,'','');setMonitorUI(symbol,'GREEN','Follow starting…',now);
     await refreshFollow(symbol);
     const active=followMonitors.get(symbol);if(active&&active.status!=='RED'&&!active.timer)active.timer=setInterval(()=>refreshFollow(symbol),FOLLOW_CONFIG.refreshMs);

@@ -70,7 +70,12 @@
   function isSelectRow(tr) {
     if (!tr || !tr.matches('tr[data-symbol]')) return false;
     if (tr.querySelector('.pill.select')) return true;
-    const resultText = String(tr.children?.[3]?.textContent || '').trim().toUpperCase();
+    const resultText = String(
+      tr.querySelector('td .pill')?.textContent
+      || tr.children?.[4]?.textContent
+      || tr.children?.[3]?.textContent
+      || ''
+    ).trim().toUpperCase();
     return resultText === 'SELECT' || resultText.startsWith('SELECT ');
   }
 
@@ -83,10 +88,11 @@
     cell.className = 'watchCell';
     cell.dataset.role = 'watch-status';
 
-    // Keep the original first 14 cells exactly where they are. Some scanners
-    // may still render legacy hidden cells after those 14 visible columns.
+    // UI only: Watch column belongs immediately after YS (after the 3rd TD).
+    // No Watch signal/decision rule is changed here.
     const cells = Array.from(tr.children).filter(el => el.tagName === 'TD');
-    if (cells.length >= 15) tr.insertBefore(cell, cells[14]);
+    const afterYs = cells[3] || null;
+    if (afterYs) tr.insertBefore(cell, afterYs);
     else tr.appendChild(cell);
     return cell;
   }
@@ -394,65 +400,14 @@
     const noChase = fromHlAtr >= 0 && fromHlAtr <= 1.60 && fromEmaAtr <= 0.90;
 
     if (longContext15 && hasHL5 && hlRecent && pullbackSeen && reclaim5 && trigger1 && noChase) {
-      // Base LONG timing is ready. BTCImpact is deliberately evaluated only here,
-      // so all existing RED/WAIT rules above remain unchanged and extra history
-      // requests are made only for actual entry-ready candidates.
-      if (!window.BTCImpact?.analyze) {
-        return {
-          status: 'YELLOW',
-          label: 'WAIT',
-          reason: 'LONG timing hazır ancak BTCImpact.js yüklenmedi; yanlış ENTRY vermemek için WAIT.',
-          at: now(),
-          price: currentPrice,
-          metrics: { pullbackAtr, fromHlAtr, fromEmaAtr }
-        };
-      }
-
-      try {
-        const btc = await window.BTCImpact.analyze(symbol, { signal });
-        const btcText = window.BTCImpact.summaryText?.(btc) || `BTC ${btc.level}`;
-        const metrics = { pullbackAtr, fromHlAtr, fromEmaAtr, btcImpact: btc };
-
-        if (btc.level === 'STRONG_NEGATIVE') {
-          return {
-            status: 'RED',
-            label: 'NO ENTRY',
-            reason: `LONG timing şartları hazır ancak BTC etkisi güçlü negatif. ${btcText}`,
-            at: now(),
-            price: currentPrice,
-            metrics
-          };
-        }
-        if (btc.level === 'NEGATIVE') {
-          return {
-            status: 'YELLOW',
-            label: 'WAIT',
-            reason: `LONG timing şartları hazır ancak BTC etkisi negatif; giriş izni beklemede. ${btcText}`,
-            at: now(),
-            price: currentPrice,
-            metrics
-          };
-        }
-
-        return {
-          status: 'GREEN',
-          label: 'ENTRY',
-          reason: `LONG timing hazır: 15m yapı uygun • 5m HL/pullback tamam • 1m yukarı trigger aktif • uzama ${fromHlAtr.toFixed(2)} ATR • ${btcText}.`,
-          at: now(),
-          price: currentPrice,
-          metrics
-        };
-      } catch (error) {
-        if (signal?.aborted || error?.name === 'AbortError') throw error;
-        return {
-          status: 'YELLOW',
-          label: 'WAIT',
-          reason: `LONG timing hazır ancak BTC etkisi doğrulanamadı; yanlış ENTRY vermemek için WAIT. ${error?.message || error}`,
-          at: now(),
-          price: currentPrice,
-          metrics: { pullbackAtr, fromHlAtr, fromEmaAtr }
-        };
-      }
+      return {
+        status: 'GREEN',
+        label: 'ENTRY',
+        reason: `LONG timing hazır: 15m yapı uygun • 5m HL/pullback tamam • 1m yukarı trigger aktif • uzama ${fromHlAtr.toFixed(2)} ATR.`,
+        at: now(),
+        price: currentPrice,
+        metrics: { pullbackAtr, fromHlAtr, fromEmaAtr }
+      };
     }
 
     const waits = [];

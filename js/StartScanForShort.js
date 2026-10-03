@@ -2071,6 +2071,12 @@ function logEntryDecisionDiagnostics(rows){
     document.dispatchEvent(new CustomEvent('cryptooffer:scan-start-short',{detail:{reason:'New Start Scan For Short',preserveFollow:true}}));
     state.running=true;state.controller=new AbortController();state.startedAt=Date.now();state.settings={windowSec,minIncrease,maxIncrease,riskBands,momentumAnalysis:momentumEnabled};resetUI();setButtons(true);
     try{
+      if(!window.CoinUniverse||typeof window.CoinUniverse.getAllowedCoins!=='function'){
+        throw new Error('CoinUniverse.js yüklenmedi. index.html içinde StartScanForShort.js dosyasından önce js/CoinUniverse.js yüklenmelidir.');
+      }
+      const allowedCoins=await window.CoinUniverse.getAllowedCoins();
+      log(`AllowedCoins loaded: ${allowedCoins.size} symbol. SHORT rank/universe/Fast Event/depth-OI threshold algoritması değişmeden korunacak; filtre yalnız final Entry Ready ağır analizinden önce uygulanacak.`);
+
       let activity;
       const cacheAge=activityCacheAgeMs();
       if(state.activityCache&&cacheAge<ACTIVITY_CACHE_MS){
@@ -2228,6 +2234,23 @@ function logEntryDecisionDiagnostics(rows){
   // Price-learning completion is kept inside this Start Scan; no background Entry Watch is created.
   progress(85,'Price learning completion');
   await completePriceLearning(refTime);
+
+  // IMPORTANT: AllowedCoins is applied only at the final Entry Ready boundary.
+  // All Activity Rank, universe, Fast Event, spread/depth/OI percentile/profile and
+  // operational calculations above remain identical to the original SHORT algorithm.
+  const rowsBeforeAllowedCoins=rows.length;
+  rows=rows.filter(r=>allowedCoins.has(r.symbol));
+  const rejectedByCoinUniverse=rowsBeforeAllowedCoins-rows.length;
+  if(rejectedByCoinUniverse>0){
+    log(`AllowedCoins Entry Ready prefilter: ${rejectedByCoinUniverse}/${rowsBeforeAllowedCoins} SHORT candidate(s) excluded before 1h/15m/5m heavy analysis; ${rows.length} remain.`);
+  }
+
+  if(!rows.length){
+    state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,analysisCandidates.length);
+    progress(100,'Completed — AllowedCoins removed Entry Ready candidates');
+    setStatus('Scan tamamlandı. Temel/operasyonel kontrolleri geçen adaylardan AllowedCoins listesinde kalan coin yok.','warn');
+    return;
+  }
 
   progress(88,'SHORT Entry Ready: 1h + 15m + 5m + location');
   const finalBooks=await getBulkBook();

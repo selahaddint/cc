@@ -2,20 +2,20 @@
   'use strict';
 
   // ================================================================
-  // LOWEST SCAN MODULE
+  // HIGHEST SCAN MODULE
   // Purpose:
   //   Find active USDT-M symbols whose current price is MinY..MaxY %
-  //   below the price approximately SEC seconds ago.
+  //   above the price approximately SEC seconds ago.
   //
   // Example:
-  //   SEC=14400, MinY=3, MaxY=8 -> symbols down 3%..8% vs ~4h ago.
+  //   SEC=14400, MinY=3, MaxY=8 -> symbols up 3%..8% vs ~4h ago.
   //
   // Integration:
   //   - Uses the existing #windowSec / #minIncrease / #maxIncrease inputs.
   //   - Renders the existing candidate grid with Entry / Stop / Follow.
   //   - Keeps active Follow rows at the top and does not stop monitors.
   //   - Stores rows in CryptoOfferData.scanState.results so current Follow.js
-  //     can capture and preserve LowestScan rows without modification.
+  //     can capture and preserve HighestScan rows without modification.
   // ================================================================
 
   const BASE = 'https://fapi.binance.com';
@@ -82,7 +82,7 @@
     const stage = $('stageText');
     if (bar) bar.style.width = `${p}%`;
     if (text) text.textContent = `${Math.round(p)}%`;
-    if (stage) stage.textContent = stageText || 'LowestScan';
+    if (stage) stage.textContent = stageText || 'HighestScan';
   }
 
   function log(message) {
@@ -163,13 +163,13 @@
     const eligibleSymbols = symbols.filter(symbol => allowedCoins.has(symbol));
 
     setProgress(5, 'Live Snapshot 1');
-    setStatus(`${LowestScan}: ilk canlı fiyat snapshot'ı alınıyor…`, 'info');
+    setStatus(`${HighestScan}: ilk canlı fiyat snapshot'ı alınıyor…`, 'info');
     const firstRaw = await fetchJson('/fapi/v2/ticker/price', { signal });
     const firstPrices = tickerPriceMap(firstRaw);
     const firstTime = Date.now();
 
     setProgress(10, 'Live Wait');
-    setStatus(`${LowestScan}: ${settings.sec} saniyelik canlı ölçüm bekleniyor…`, 'info');
+    setStatus(`${HighestScan}: ${settings.sec} saniyelik canlı ölçüm bekleniyor…`, 'info');
     await sleep(settings.sec * 1000);
     if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
 
@@ -185,10 +185,10 @@
       if (!(first > 0) || !(currentPrice > 0)) continue;
 
       const changePct = ((currentPrice / first) - 1) * 100;
-      const dropPct = -changePct;
-      if (!(dropPct >= settings.minDrop && dropPct <= settings.maxDrop)) continue;
+      const risePct = changePct;
+      if (!(risePct >= settings.minRise && risePct <= settings.maxRise)) continue;
 
-      const reason = `${fmtDuration(settings.sec)} live: ${fmtPrice(first)} → ${fmtPrice(currentPrice)} • Drop ${dropPct.toFixed(3)}%`;
+      const reason = `${fmtDuration(settings.sec)} live: ${fmtPrice(first)} → ${fmtPrice(currentPrice)} • Rise ${risePct.toFixed(3)}%`;
       matches.push({
         symbol,
         result: 'SELECT',
@@ -198,14 +198,14 @@
         price: currentPrice,
         fastChange: changePct,
         reasons: [reason],
-        lowestScan: {
+        highestScan: {
           sec: settings.sec,
-          minDrop: settings.minDrop,
-          maxDrop: settings.maxDrop,
+          minRise: settings.minRise,
+          maxRise: settings.maxRise,
           referencePrice: first,
           currentPrice,
           changePct,
-          dropPct,
+          risePct,
           targetTime: firstTime,
           referenceCandleOpenTime: null,
           referenceCandleCloseTime: null,
@@ -217,7 +217,7 @@
       });
     }
 
-    matches.sort((a, b) => b.lowestScan.dropPct - a.lowestScan.dropPct);
+    matches.sort((a, b) => b.highestScan.risePct - a.highestScan.risePct);
     return { matches, eligibleCount: eligibleSymbols.length, firstTime, secondTime };
   }
 
@@ -284,7 +284,7 @@
   }
 
   function genericReason(row) {
-    if (row?.lowestScan?.reason) return row.lowestScan.reason;
+    if (row?.highestScan?.reason) return row.highestScan.reason;
     if (row?.chartAnalysis?.reason) return row.chartAnalysis.reason;
     if (Array.isArray(row?.reasons) && row.reasons.length) return row.reasons.join(' • ');
     return row?.result === 'SELECT' ? 'SELECT' : 'Active Follow';
@@ -315,8 +315,8 @@
     const symbol = row.symbol;
     const reason = genericReason(row);
     const price = genericCurrentPrice(row);
-    const drop = num(row?.lowestScan?.dropPct);
-    const liveChange = Number.isFinite(drop) ? `Drop ${drop.toFixed(3)}%` : '';
+    const rise = num(row?.highestScan?.risePct);
+    const liveChange = Number.isFinite(rise) ? `Rise ${rise.toFixed(3)}%` : '';
 
     return `<tr data-symbol="${esc(symbol)}">
       <td>${index + 1}</td>
@@ -344,15 +344,15 @@
     state.results = rows;
     state.startedAt = startedAt;
     state.completedAt = completedAt;
-    state.lowestScan = true;
-    state.lowestScanSettings = settings;
+    state.highestScan = true;
+    state.highestScanSettings = settings;
     window.CryptoOfferData.scanState = state;
 
-    window.CryptoOfferData.lowestScanState = {
+    window.CryptoOfferData.highestScanState = {
       startedAt,
       completedAt,
       settings,
-      results: rows.filter(r => r?.lowestScan)
+      results: rows.filter(r => r?.highestScan)
     };
   }
 
@@ -368,10 +368,10 @@
     syncScanState(rows, startedAt, completedAt, settings);
 
     const title = $('candidateResponseTitle');
-    if (title) title.textContent = `LowestScan - ${fmtTime(completedAt)}`;
+    if (title) title.textContent = `HighestScan - ${fmtTime(completedAt)}`;
 
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="14" class="empty">LowestScan: belirtilen düşüş aralığında coin bulunamadı.</td></tr>';
+      body.innerHTML = '<tr><td colspan="14" class="empty">HighestScan: belirtilen yükseliş aralığında coin bulunamadı.</td></tr>';
     } else {
       body.innerHTML = rows.map(renderRow).join('');
     }
@@ -382,23 +382,23 @@
 
   function readSettings() {
     const sec = num($('windowSec')?.value);
-    const minDrop = num($('minIncrease')?.value);
-    const maxDrop = num($('maxIncrease')?.value);
+    const minRise = num($('minIncrease')?.value);
+    const maxRise = num($('maxIncrease')?.value);
 
     if (!(sec >= MIN_SEC && sec <= MAX_SEC)) {
-      throw new Error(`LowestScan için Sec. ${MIN_SEC}–${MAX_SEC} saniye arasında olmalı.`);
+      throw new Error(`HighestScan için Sec. ${MIN_SEC}–${MAX_SEC} saniye arasında olmalı.`);
     }
-    if (!(minDrop > 0 && minDrop <= 100)) {
+    if (!(minRise > 0 && minRise <= 100)) {
       throw new Error('MinY 0–100% arasında pozitif olmalı.');
     }
-    if (!(maxDrop > 0 && maxDrop <= 100)) {
+    if (!(maxRise > 0 && maxRise <= 100)) {
       throw new Error('MaxY 0–100% arasında pozitif olmalı.');
     }
-    if (maxDrop < minDrop) {
+    if (maxRise < minRise) {
       throw new Error('MaxY, MinY değerinden küçük olamaz.');
     }
 
-    return { sec: Math.round(sec), minDrop, maxDrop };
+    return { sec: Math.round(sec), minRise, maxRise };
   }
 
   async function scan(customSettings = null) {
@@ -410,21 +410,21 @@
     controller = new AbortController();
     const signal = controller.signal;
 
-    const button = $('lowestScanBtn');
+    const button = $('highestScanBtn');
     const cancelButton = $('cancelBtn');
     if (button) {
       button.disabled = true;
-      button.textContent = 'LowestScan…';
+      button.textContent = 'HighestScan…';
     }
     if (cancelButton) cancelButton.disabled = false;
 
     // Keep current Follow monitors alive across this scan.
     document.dispatchEvent(new CustomEvent('cryptooffer:scan-start', {
-      detail: { reason: 'New LowestScan', preserveFollow: true }
+      detail: { reason: 'New HighestScan', preserveFollow: true }
     }));
 
-    setProgress(1, 'LowestScan');
-    setStatus(`LowestScan: ${fmtDuration(settings.sec)} geçmiş fiyatı hazırlanıyor…`, 'info');
+    setProgress(1, 'HighestScan');
+    setStatus(`HighestScan: ${fmtDuration(settings.sec)} geçmiş fiyatı hazırlanıyor…`, 'info');
 
     try {
       const [timeRaw, exchangeInfo, tickerRaw] = await Promise.all([
@@ -440,10 +440,10 @@
       const prices = tickerPriceMap(tickerRaw);
 
       // Coin universe pre-filter only.
-      // IMPORTANT: LowestScan selection/drop algorithm is unchanged.
+      // IMPORTANT: HighestScan selection/rise algorithm is unchanged.
       // The filter is applied before symbol-specific historical kline requests.
       if (!window.CoinUniverse?.getAllowedCoins) {
-        throw new Error('CoinUniverse.js yüklenmedi. index.html içinde LowestScan.js dosyasından önce yüklenmeli.');
+        throw new Error('CoinUniverse.js yüklenmedi. index.html içinde HighestScan.js dosyasından önce yüklenmeli.');
       }
       const allowedCoins = await window.CoinUniverse.getAllowedCoins();
 
@@ -451,14 +451,14 @@
         const live = await liveSnapshotScan(settings, symbols, allowedCoins, signal, startedAt);
         const completedAt = Date.now();
         renderResults(live.matches, startedAt, completedAt, settings);
-        setProgress(100, 'LowestScan Completed');
+        setProgress(100, 'HighestScan Completed');
         setStatus(
-          `LowestScan tamamlandı • ${fmtDuration(settings.sec)} canlı ölçüm • Drop ${settings.minDrop}%–${settings.maxDrop}% • ${live.matches.length} coin`,
+          `HighestScan tamamlandı • ${fmtDuration(settings.sec)} canlı ölçüm • Rise ${settings.minRise}%–${settings.maxRise}% • ${live.matches.length} coin`,
           live.matches.length ? 'good' : 'warn'
         );
-        log(`LowestScan live complete: ${live.matches.length}/${live.eligibleCount} match`);
+        log(`HighestScan live complete: ${live.matches.length}/${live.eligibleCount} match`);
         const detail = { startedAt, completedAt, settings, all: live.matches, select: live.matches, requestErrors: 0, liveSnapshotMode: true };
-        window.dispatchEvent(new CustomEvent('lowestscan:complete', { detail }));
+        window.dispatchEvent(new CustomEvent('highestscan:complete', { detail }));
         return detail;
       }
 
@@ -466,7 +466,7 @@
       const targetTime = serverTime - settings.sec * 1000;
 
       setProgress(5, 'Reference Prices');
-      setStatus(`LowestScan: ${eligible.length} coin için ${fmtDuration(settings.sec)} önceki fiyat okunuyor…`, 'info');
+      setStatus(`HighestScan: ${eligible.length} coin için ${fmtDuration(settings.sec)} önceki fiyat okunuyor…`, 'info');
 
       let requestErrors = 0;
       const rows = await mapLimit(
@@ -479,11 +479,11 @@
 
             const currentPrice = prices.get(symbol);
             const changePct = ((currentPrice / ref.price) - 1) * 100;
-            const dropPct = -changePct;
+            const risePct = changePct;
 
-            if (!(dropPct >= settings.minDrop && dropPct <= settings.maxDrop)) return null;
+            if (!(risePct >= settings.minRise && risePct <= settings.maxRise)) return null;
 
-            const reason = `${fmtDuration(settings.sec)}: ${fmtPrice(ref.price)} → ${fmtPrice(currentPrice)} • Drop ${dropPct.toFixed(3)}%`;
+            const reason = `${fmtDuration(settings.sec)}: ${fmtPrice(ref.price)} → ${fmtPrice(currentPrice)} • Rise ${risePct.toFixed(3)}%`;
             return {
               symbol,
               result: 'SELECT',
@@ -492,14 +492,14 @@
               price: currentPrice,
               fastChange: changePct,
               reasons: [reason],
-              lowestScan: {
+              highestScan: {
                 sec: settings.sec,
-                minDrop: settings.minDrop,
-                maxDrop: settings.maxDrop,
+                minRise: settings.minRise,
+                maxRise: settings.maxRise,
                 referencePrice: ref.price,
                 currentPrice,
                 changePct,
-                dropPct,
+                risePct,
                 targetTime,
                 referenceCandleOpenTime: ref.candleOpenTime,
                 referenceCandleCloseTime: ref.candleCloseTime,
@@ -515,52 +515,52 @@
         signal,
         (done, total) => {
           const pct = 5 + (done / Math.max(1, total)) * 90;
-          setProgress(pct, `LowestScan ${done}/${total}`);
+          setProgress(pct, `HighestScan ${done}/${total}`);
           if (done === total || done % 20 === 0) {
-            setStatus(`LowestScan: ${done}/${total} incelendi…`, 'info');
+            setStatus(`HighestScan: ${done}/${total} incelendi…`, 'info');
           }
         }
       );
 
       const matches = rows
         .filter(Boolean)
-        .sort((a, b) => b.lowestScan.dropPct - a.lowestScan.dropPct);
+        .sort((a, b) => b.highestScan.risePct - a.highestScan.risePct);
 
       const completedAt = Date.now();
       renderResults(matches, startedAt, completedAt, settings);
-      setProgress(100, 'LowestScan Completed');
+      setProgress(100, 'HighestScan Completed');
       setStatus(
-        `LowestScan tamamlandı • ${fmtDuration(settings.sec)} • Drop ${settings.minDrop}%–${settings.maxDrop}% • ${matches.length} coin`,
+        `HighestScan tamamlandı • ${fmtDuration(settings.sec)} • Rise ${settings.minRise}%–${settings.maxRise}% • ${matches.length} coin`,
         matches.length ? 'good' : 'warn'
       );
-      log(`LowestScan complete: ${matches.length}/${eligible.length} match • request errors ${requestErrors}`);
+      log(`HighestScan complete: ${matches.length}/${eligible.length} match • request errors ${requestErrors}`);
 
       const detail = { startedAt, completedAt, settings, all: matches, select: matches, requestErrors };
-      window.dispatchEvent(new CustomEvent('lowestscan:complete', { detail }));
+      window.dispatchEvent(new CustomEvent('highestscan:complete', { detail }));
       return detail;
     } catch (error) {
       if (error?.name === 'AbortError') {
-        setProgress(0, 'LowestScan Cancelled');
-        setStatus('LowestScan iptal edildi.', 'warn');
-        window.dispatchEvent(new CustomEvent('lowestscan:cancelled'));
+        setProgress(0, 'HighestScan Cancelled');
+        setStatus('HighestScan iptal edildi.', 'warn');
+        window.dispatchEvent(new CustomEvent('highestscan:cancelled'));
         return null;
       }
 
-      console.error('LowestScan error:', error);
-      setProgress(0, 'LowestScan Error');
-      setStatus(`LowestScan hata: ${error?.message || error}`, 'bad');
-      window.dispatchEvent(new CustomEvent('lowestscan:error', {
+      console.error('HighestScan error:', error);
+      setProgress(0, 'HighestScan Error');
+      setStatus(`HighestScan hata: ${error?.message || error}`, 'bad');
+      window.dispatchEvent(new CustomEvent('highestscan:error', {
         detail: { message: error?.message || String(error) }
       }));
       throw error;
     } finally {
       running = false;
       controller = null;
-      const button = $('lowestScanBtn');
+      const button = $('highestScanBtn');
       const cancelButton = $('cancelBtn');
       if (button) {
         button.disabled = false;
-        button.textContent = 'LowestScan';
+        button.textContent = 'HighestScan';
       }
       if (cancelButton) cancelButton.disabled = true;
     }
@@ -571,7 +571,7 @@
   }
 
   function bindUI() {
-    const button = $('lowestScanBtn');
+    const button = $('highestScanBtn');
     const cancelButton = $('cancelBtn');
     if (!button) return;
 
@@ -591,7 +591,7 @@
     }
   }
 
-  window.LowestScan = {
+  window.HighestScan = {
     scan,
     cancel,
     get running() { return running; },

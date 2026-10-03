@@ -2069,6 +2069,12 @@ function logEntryDecisionDiagnostics(rows){
     document.dispatchEvent(new CustomEvent('cryptooffer:scan-start',{detail:{reason:'New Start Scan',preserveFollow:true}}));
     state.running=true;state.controller=new AbortController();state.startedAt=Date.now();state.settings={windowSec,minIncrease,maxIncrease,riskBands,momentumAnalysis:momentumEnabled};resetUI();setButtons(true);
     try{
+      if(!window.CoinUniverse||typeof window.CoinUniverse.getAllowedCoins!=='function'){
+        throw new Error('CoinUniverse.js yüklenmedi. index.html içinde StartScan.js dosyasından önce js/CoinUniverse.js yüklenmelidir.');
+      }
+      const allowedCoins=await window.CoinUniverse.getAllowedCoins();
+      log(`AllowedCoins loaded: ${allowedCoins.size} symbol. Rank/Fast Event/base percentile algoritması tam korunacak; filtre yalnız Entry Ready ağır analizinden önce uygulanacak.`);
+
       let activity;
       const cacheAge=activityCacheAgeMs();
       if(state.activityCache&&cacheAge<ACTIVITY_CACHE_MS){
@@ -2219,6 +2225,26 @@ function logEntryDecisionDiagnostics(rows){
     state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,analysisCandidates.length);
     progress(100,'Completed — operational filters removed all candidates');
     setStatus('Scan tamamlandı. Operasyonel kontrolden geçen aday yok.','warn');
+    return;
+  }
+
+  // AllowedCoins is deliberately applied only here.
+  // Everything above (Activity Rank, Fast Event, base candidate details, depth/OI
+  // percentiles and operational checks) remains identical to the original algorithm.
+  // This still avoids the expensive 1h/15m/5m Entry Ready chart analysis for excluded coins.
+  const rowsBeforeCoinUniverse=rows.length;
+  const excludedByCoinUniverse=rows.filter(r=>!allowedCoins.has(r.symbol)).map(r=>r.symbol);
+  rows=rows.filter(r=>allowedCoins.has(r.symbol));
+  if(excludedByCoinUniverse.length){
+    log(`AllowedCoins Entry Ready prefilter: ${excludedByCoinUniverse.length}/${rowsBeforeCoinUniverse} excluded before 1h/15m/5m chart analysis: ${excludedByCoinUniverse.join(', ')}`);
+  }else{
+    log(`AllowedCoins Entry Ready prefilter: 0/${rowsBeforeCoinUniverse} excluded.`);
+  }
+
+  if(!rows.length){
+    state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,analysisCandidates.length);
+    progress(100,'Completed — AllowedCoins removed remaining candidates');
+    setStatus(`Scan tamamlandı. Temel filtreleri geçen ${rowsBeforeCoinUniverse} adayın tamamı AllowedCoins dışında kaldı.`,'warn');
     return;
   }
 

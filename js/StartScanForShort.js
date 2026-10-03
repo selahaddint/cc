@@ -310,7 +310,7 @@
     p=clamp(p,0,100);$('progressBar').style.width=`${p}%`;$('progressText').textContent=`${Math.round(p)}%`;$('stageText').textContent=text||'';
   }
   function setButtons(running){
-    const start=$('startShortBtn'),cancel=$('cancelShortBtn');
+    const start=$('startShortBtn'),cancel=$('cancelBtn');
     if(start)start.disabled=running||autoScanEnabled();
     if(cancel)cancel.disabled=!running;
     updateAutoScanCountdown();
@@ -2324,7 +2324,7 @@ function logEntryDecisionDiagnostics(rows){
     void startScan();
   });
 
-  $('cancelShortBtn')?.addEventListener('click',()=>{if(state.controller)state.controller.abort();});
+  $('cancelBtn')?.addEventListener('click',()=>{if(state.controller)state.controller.abort();});
 
   loadPersistentActivityCache();
   loadFastEventWatch();

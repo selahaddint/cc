@@ -132,7 +132,7 @@
   }
 
   function syncCells() {
-    body.querySelectorAll('td.empty').forEach(td => { td.colSpan = 15; });
+    body.querySelectorAll('td.empty').forEach(td => { td.colSpan = 16; });
     body.querySelectorAll('tr[data-symbol]').forEach(tr => {
       const symbol = symbolOf(tr);
       if (!symbol) return;

@@ -23,6 +23,7 @@
   // Keeps the original scan-row model for symbols that have been followed.
   // The cache is separate from followMonitors so a row can be re-used if Follow is restarted.
   const followRowCache=new Map();
+  const followRowDomCache=new Map();
   const followNum=v=>{const n=Number(v);return Number.isFinite(n)?n:NaN};
   const followFmt=(x,d=2)=>Number.isFinite(x)?x.toFixed(d):'—';
   const followPct=x=>Number.isFinite(x)?`${x>=0?'+':''}${x.toFixed(3)}%`:'—';
@@ -72,6 +73,49 @@
     const highs=[],lows=[];for(let i=left;i<candles.length-right;i++){let sh=true,sl=true;for(let k=1;k<=left;k++){if(!(candles[i].high>candles[i-k].high))sh=false;if(!(candles[i].low<candles[i-k].low))sl=false;}for(let k=1;k<=right;k++){if(!(candles[i].high>candles[i+k].high))sh=false;if(!(candles[i].low<candles[i+k].low))sl=false;}if(sh)highs.push({index:i,price:candles[i].high});if(sl)lows.push({index:i,price:candles[i].low});}return {highs,lows};
   }
   function followRow(symbol){return [...document.querySelectorAll('#candidateBody tr[data-symbol]')].find(tr=>tr.dataset.symbol===symbol)||null;}
+
+  function followScanSource(tr){
+    return String(tr?.dataset?.scanSource||tr?.querySelector('[data-role="scan-source"]')?.textContent||window.CryptoOfferData?.activeScanSource||'Unknown').trim()||'Unknown';
+  }
+  function snapshotFollowRow(symbol,entryPrice,stopPrice,scanSource){
+    const tr=followRow(symbol);if(!tr)return null;
+    const clone=tr.cloneNode(true);
+    clone.dataset.followPreserved='true';
+    clone.dataset.scanSource=scanSource||followScanSource(tr);
+    const entry=clone.querySelector('[data-role="entry"]'),stop=clone.querySelector('[data-role="stop"]');
+    if(entry){entry.value=String(entryPrice);entry.setAttribute('value',String(entryPrice));}
+    if(stop){stop.value=String(stopPrice);stop.setAttribute('value',String(stopPrice));}
+    const sourceCell=clone.querySelector('[data-role="scan-source"]');
+    if(sourceCell)sourceCell.textContent=clone.dataset.scanSource;
+    followRowDomCache.set(symbol,clone);
+    return clone;
+  }
+  function ensureFollowRowDom(task){
+    if(!task||task.status==='RED')return null;
+    const body=document.getElementById('candidateBody');if(!body)return null;
+    let tr=followRow(task.symbol);
+    const session=String(task.startedAt||'');
+    const isOwned=tr&&tr.dataset.followSession===session;
+    const hasControls=tr&&tr.querySelector('[data-role="entry"]')&&tr.querySelector('[data-role="stop"]')&&tr.querySelector('[data-action="follow"]');
+    if(!isOwned||!hasControls){
+      const cached=task.preservedDom||followRowDomCache.get(task.symbol);
+      if(cached){
+        const clone=cached.cloneNode(true);
+        clone.dataset.followPreserved='true';
+        clone.dataset.followSession=session;
+        clone.dataset.scanSource=task.scanSource||clone.dataset.scanSource||'Unknown';
+        const sourceCell=clone.querySelector('[data-role="scan-source"]');if(sourceCell&&sourceCell.textContent!==clone.dataset.scanSource)sourceCell.textContent=clone.dataset.scanSource;
+        if(tr)tr.replaceWith(clone);else body.prepend(clone);
+        tr=clone;
+      }
+    }
+    if(tr){
+      tr.dataset.followPreserved='true';tr.dataset.followSession=session;tr.dataset.scanSource=task.scanSource||tr.dataset.scanSource||'Unknown';
+      const sourceCell=tr.querySelector('[data-role="scan-source"]');if(sourceCell&&sourceCell.textContent!==tr.dataset.scanSource)sourceCell.textContent=tr.dataset.scanSource;
+      if(body.firstElementChild!==tr)body.prepend(tr);
+    }
+    return tr;
+  }
   async function followFetchJson(url,{retries=3,timeout=15000,essential=false}={}){
     let lastErr;
     for(let attempt=0;attempt<=retries;attempt++){
@@ -295,7 +339,8 @@
       stopPrice:Number(task.stopPrice),
       exitPrice:Number.isFinite(finalPrice)?finalPrice:null,
       reason:String(reason||''),
-      closeType:String(closeType||'EXIT')
+      closeType:String(closeType||'EXIT'),
+      scanSource:String(task.scanSource||task.preservedRow?.scanSource||'Unknown')
     }}));
   }
 
@@ -303,6 +348,7 @@
     const task=followMonitors.get(symbol);
     if(task?.timer)clearInterval(task.timer);
     followMonitors.delete(symbol);
+    const tr=followRow(symbol);if(tr){delete tr.dataset.followSession;delete tr.dataset.followPreserved;}
     if(reset){setMonitorUI(symbol,'OFF',reason);setLiveUI(symbol,'','');}
   }
 
@@ -328,6 +374,7 @@
       window.CryptoOfferData?.coinScanForShortState,
       window.CryptoOfferData?.rangeBreakoutState,
       window.CryptoOfferData?.squeezeLongState,
+      window.CryptoOfferData?.longEntryConfirmState,
       window.CryptoOfferData?.rangeSqueezeLongState
     ].filter(Boolean).sort((a,b)=>(Number(b?.startedAt)||0)-(Number(a?.startedAt)||0));
 
@@ -338,7 +385,12 @@
       if(found){fromLatestScan=found;break;}
     }
 
-    const model=cloneFollowRowModel(fromLatestScan)||cloneFollowRowModel(existingTask?.preservedRow)||cloneFollowRowModel(followRowCache.get(symbol));
+    let model=cloneFollowRowModel(fromLatestScan)||cloneFollowRowModel(existingTask?.preservedRow)||cloneFollowRowModel(followRowCache.get(symbol));
+    if(!model){
+      const tr=followRow(symbol),displayed=followDisplayedPrice(symbol);
+      model={symbol,result:String(tr?.querySelector('.pill')?.textContent||'SELECT').trim().toUpperCase()||'SELECT',snapshot2:displayed,decisionPrice:displayed,price:displayed};
+    }
+    model.scanSource=existingTask?.scanSource||model.scanSource||followScanSource(followRow(symbol));
     if(model)followRowCache.set(symbol,model);
     return model;
   }
@@ -357,7 +409,7 @@
   function restoreFollowRowsUI(){
     for(const task of followMonitors.values()){
       if(!task||task.status==='RED')continue;
-      const tr=followRow(task.symbol);if(!tr)continue;
+      const tr=ensureFollowRowDom(task);if(!tr)continue;
       const entry=tr.querySelector('[data-role="entry"]'),stop=tr.querySelector('[data-role="stop"]');
       if(entry)entry.value=String(task.entryPrice);
       if(stop)stop.value=String(task.stopPrice);
@@ -674,8 +726,11 @@
     if(!(stop>0)){setMonitorUI(symbol,'OFF','Stop Price girilmelidir.');return;}
     if(!(stop<entry)){setMonitorUI(symbol,'OFF','LONG için Stop Price, Entry Price altında olmalıdır.');return;}
     const now=Date.now();
-    const preservedRow=captureFollowRowModel(symbol,existing);
-    const task={symbol,entryPrice:entry,stopPrice:stop,startedAt:now,highest:entry,breakEvenArmed:false,breakEvenArmedAt:0,effectiveExitLevel:NaN,status:'GREEN',reason:'Follow starting',refreshing:false,prevPrice:NaN,prevOi:NaN,prevBasisPct:NaN,prevFundingRate:NaN,prevLiveTime:NaN,oiDeltaHistory:[],live5m:null,liveAnalysis:null,btcImpact:null,btcImpactError:null,lastHL:NaN,lastHH:NaN,lastSeenLowTime:0,lastSeenHighTime:0,pendingHL:null,hlInitialized:false,tf15:null,tf5:null,tf3:null,timer:null,preservedRow};
+    const scanSource=followScanSource(tr);
+    const preservedRow=captureFollowRowModel(symbol,existing);if(preservedRow)preservedRow.scanSource=scanSource;
+    const preservedDom=snapshotFollowRow(symbol,entry,stop,scanSource);
+    const task={symbol,entryPrice:entry,stopPrice:stop,scanSource,startedAt:now,highest:entry,breakEvenArmed:false,breakEvenArmedAt:0,effectiveExitLevel:NaN,status:'GREEN',reason:'Follow starting',refreshing:false,prevPrice:NaN,prevOi:NaN,prevBasisPct:NaN,prevFundingRate:NaN,prevLiveTime:NaN,oiDeltaHistory:[],live5m:null,liveAnalysis:null,btcImpact:null,btcImpactError:null,lastHL:NaN,lastHH:NaN,lastSeenLowTime:0,lastSeenHighTime:0,pendingHL:null,hlInitialized:false,tf15:null,tf5:null,tf3:null,timer:null,preservedRow,preservedDom};
+    tr.dataset.followSession=String(now);tr.dataset.followPreserved='true';tr.dataset.scanSource=scanSource;
     followMonitors.set(symbol,task);setLiveUI(symbol,'','');setMonitorUI(symbol,'GREEN','Follow starting…',now);
     await refreshFollow(symbol);
     const active=followMonitors.get(symbol);if(active&&active.status!=='RED'&&!active.timer)active.timer=setInterval(()=>refreshFollow(symbol),FOLLOW_CONFIG.refreshMs);
@@ -706,14 +761,18 @@
     const symbol=btn.dataset.symbol;if(symbol)startFollow(symbol);
   });
 
-  document.addEventListener('cryptooffer:scan-start',e=>{
-    // StartScan explicitly sets preserveFollow=true. In that case active Follow tasks,
-    // timers and their grid rows must survive and will be re-rendered at the top.
-    if(e.detail?.preserveFollow===true)return;
-    stopAllFollowMonitors(e.detail?.reason||'New scan started');
+  document.addEventListener('cryptooffer:scan-start',()=>{
+    // All scanners are independent from Follow. Starting another scan must never
+    // stop, delete or reset an active Follow session.
+    restoreFollowRowsUI();
   });
   document.addEventListener('cryptooffer:candidates-rendered',restoreFollowRowsUI);
 
+
+  // Follow restoration is intentionally event-driven. Scanners dispatch
+  // cryptooffer:candidates-rendered after replacing the grid. A permanent
+  // MutationObserver here can fight with grid normalization and repeatedly
+  // move/replace an active Follow row, eventually starving the UI thread.
 
   window.CryptoFlowScanner=window.CryptoFlowScanner||{version:'V13.4',modules:{}};
   window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};

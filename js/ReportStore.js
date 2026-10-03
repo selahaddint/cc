@@ -196,6 +196,7 @@
           follow_date TEXT NOT NULL,
           follow_time TEXT NOT NULL,
           coin TEXT NOT NULL,
+          scan_source TEXT NOT NULL DEFAULT '',
           entry_price REAL NOT NULL,
           stop_price REAL NOT NULL,
           profit_pct REAL,
@@ -216,6 +217,7 @@
         const nameIndex = followInfo[0].columns.indexOf('name');
         for (const row of followInfo[0].values) followColumns.add(String(row[nameIndex]));
       }
+      if (!followColumns.has('scan_source')) db.run("ALTER TABLE follow_report ADD COLUMN scan_source TEXT NOT NULL DEFAULT '';");
       if (!followColumns.has('follow_start_time')) db.run('ALTER TABLE follow_report ADD COLUMN follow_start_time TEXT;');
       if (!followColumns.has('follow_end_time')) db.run('ALTER TABLE follow_report ADD COLUMN follow_end_time TEXT;');
       if (!followColumns.has('follow_duration_sec')) db.run('ALTER TABLE follow_report ADD COLUMN follow_duration_sec INTEGER;');
@@ -351,20 +353,22 @@
       const profitPct = calcProfitPct(entryPrice, safeExitPrice);
       const closeType = String(detail?.closeType || 'EXIT').toUpperCase();
       const reason = String(detail?.reason || (closeType === 'MANUAL' ? 'Manual Follow Stop' : 'EXIT'));
+      const scanSource = String(detail?.scanSource || 'Unknown');
       const followStartTime = localTimeFromMs(startedAt);
       const followEndTime = localTimeFromMs(closedAt);
       const followDurationSec = Math.max(0, Math.round((closedAt - startedAt) / 1000));
 
       const stmt = database.prepare(`
         INSERT OR IGNORE INTO follow_report
-          (follow_key, follow_date, follow_time, coin, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (follow_key, follow_date, follow_time, coin, scan_source, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       stmt.run([
         followKey,
         localDateFromMs(startedAt),
         localTimeFromMs(startedAt),
         symbol,
+        scanSource,
         entryPrice,
         stopPrice,
         profitPct,
@@ -389,7 +393,7 @@
   function queryAllFollowRows() {
     if (!db) return [];
     const stmt = db.prepare(`
-      SELECT id, follow_date, follow_time, coin, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec
+      SELECT id, follow_date, follow_time, coin, scan_source, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec
       FROM follow_report
     `);
     const rows = [];
@@ -510,7 +514,7 @@
 
     if (!els.followReportBody) return;
     if (!rows.length) {
-      els.followReportBody.innerHTML = '<tr><td colspan="10" class="reportEmpty">No records.</td></tr>';
+      els.followReportBody.innerHTML = '<tr><td colspan="11" class="reportEmpty">No records.</td></tr>';
       updateSortMarks('#followReportTable', followSortState);
       return;
     }
@@ -520,6 +524,7 @@
         <td>${esc(r.follow_date || '—')}</td>
         <td>${esc(r.follow_time || '—')}</td>
         <td class="symbol">${esc(r.coin || '—')}</td>
+        <td>${esc(r.scan_source || 'Unknown')}</td>
         <td class="num">${esc(formatPrice(r.entry_price))}</td>
         <td class="num">${esc(formatPrice(r.stop_price))}</td>
         <td class="num ${Number(r.profit_pct) >= 0 ? 'good' : 'bad'}">${esc(formatProfit(r.profit_pct))}</td>

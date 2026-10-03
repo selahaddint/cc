@@ -164,8 +164,8 @@ body{padding-top:54px;padding-bottom:24px}
 
 
 /* UI Final — presentation only; scanner/follow logic remains in existing JS modules. */
-#candidateTable th:nth-child(n+16),
-#candidateTable td:nth-child(n+16){display:none!important}
+#candidateTable th:nth-child(n+17),
+#candidateTable td:nth-child(n+17){display:none!important}
 #candidateTable{min-width:1080px}
 .monitorInput{width:96px!important;max-width:96px!important}
 .entryPriceInput,.stopPriceInput{-moz-appearance:textfield;appearance:textfield}
@@ -282,9 +282,9 @@ body{padding-top:54px;padding-bottom:24px}
           <thead><tr>
             <th>#</th><th>Coin</th><th title="YS durumunu gösterir. Hücreye tıklayınca CoinHistory.json tarihsel profili açılır.">YS</th><th title="LONG giriş zamanlaması: yeşil ENTRY, sarı WAIT, kırmızı NO ENTRY">Watch</th><th>Result</th>
             <th title="Coin'in mevcut fiyatının kendi yakın dönem fiyat geçmişindeki göreli konumu. Coin seçimini etkilemez; coin adına tıklanınca hesaplanır.">PriceLvl</th><th title="Coin'in kısa sürede sert yukarı/aşağı hareket etme eğilimi. Yön tahmini değildir ve coin seçimini etkilemez; coin adına tıklanınca hesaplanır.">RiskLvl</th>
-            <th>Entry</th><th>Stop</th><th>Price</th><th>Follow</th><th>Monitor</th><th>Reason</th><th>LiveChn</th><th>LiveRes</th>
+            <th>Entry</th><th>Stop</th><th>Price</th><th>Follow</th><th>Monitor</th><th>Reason</th><th>LiveChn</th><th>LiveRes</th><th title="Bu satırı üreten bağımsız tarama butonu">Scan</th>
           </tr></thead>
-          <tbody id="candidateBody"><tr><td colspan="15" class="empty">Henüz scan yapılmadı.</td></tr></tbody>
+          <tbody id="candidateBody"><tr><td colspan="16" class="empty">Henüz scan yapılmadı.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -404,10 +404,10 @@ body{padding-top:54px;padding-bottom:24px}
 
 <script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.1/dist/sql-wasm.js"></script>
 <script src="js/AllowedCoins.js"></script>
-<script src="js/ReportStore.js?v=14.27"></script>
+<script src="js/ReportStore.js?v=14.40"></script>
 <script src="js/CoinUniverse.js"></script>
 <script src="js/StartScan.js?v=14.19"></script>
-<script src="js/StartScanForShort.js?v=14.26"></script>
+<script src="js/StartScanForShort.js?v=14.40"></script>
 <!-- LowestScan.js is the canonical module name. LowerScan.js is accepted only as a filename fallback. -->
 <script src="js/LowestScan.js?v=14.28" onerror="this.onerror=null;this.src='js/LowerScan.js?v=14.28';"></script>
 <script src="js/HighestScan.js?v=14.39"></script>
@@ -476,10 +476,10 @@ body{padding-top:54px;padding-bottom:24px}
 </script>
 
 
-<script src="js/RiskManagement.js"></script>
+<script src="js/RiskManagement.js?v=14.40"></script>
 
 <script src="js/BTCImpact.js"></script>
-<script src="js/Follow.js?v=14.33"></script>
+<script src="js/Follow.js?v=14.41"></script>
 <script src="js/OneMScan.js?v=14.23"></script>
 <script src="js/BookScan.js?v=14.25"></script>
 <script src="js/coinscan.js"></script>
@@ -487,7 +487,8 @@ body{padding-top:54px;padding-bottom:24px}
 <script src="js/RangeBreakoutScan.js?v=14.31"></script>
 <script src="js/LongEntryConfirm.js?v=14.35"></script>
 <script src="js/Ema200SqueezeLongScan.js?v=14.32"></script>
-<script src="js/Watch.js?v=14.31"></script>
+<script src="js/Watch.js?v=14.40"></script>
+<script src="js/GridIntegration.js?v=14.41"></script>
 
 
 
@@ -2234,7 +2235,7 @@ body{padding-top:54px;padding-bottom:24px}
       const loading=tr.querySelector('[data-role="price-level"]')?.classList.contains('loading') || tr.querySelector('[data-role="risk-level"]')?.classList.contains('loading');
       if(symbolBtn){symbolBtn.style.pointerEvents='auto';if(!loading)symbolBtn.disabled=false;}
     });
-    body.querySelectorAll('td.empty').forEach(td=>td.colSpan=15);
+    body.querySelectorAll('td.empty').forEach(td=>td.colSpan=16);
     updateCandidateTitle();
   }
 
@@ -2309,6 +2310,7 @@ body{padding-top:54px;padding-bottom:24px}
               <th data-sort="follow_date">Date <span class="sortMark"></span></th>
               <th data-sort="follow_time">Hour <span class="sortMark"></span></th>
               <th data-sort="coin">Coin <span class="sortMark"></span></th>
+              <th data-sort="scan_source">Scan <span class="sortMark"></span></th>
               <th data-sort="entry_price">EntryPrice <span class="sortMark"></span></th>
               <th data-sort="stop_price">StopPrice <span class="sortMark"></span></th>
               <th data-sort="profit_pct">Profit <span class="sortMark"></span></th>
@@ -2318,7 +2320,7 @@ body{padding-top:54px;padding-bottom:24px}
               <th data-sort="reason">Reason <span class="sortMark"></span></th>
             </tr>
           </thead>
-          <tbody id="followReportBody"><tr><td colspan="10" class="reportEmpty">No records.</td></tr></tbody>
+          <tbody id="followReportBody"><tr><td colspan="11" class="reportEmpty">No records.</td></tr></tbody>
         </table>
       </div>
     </div>

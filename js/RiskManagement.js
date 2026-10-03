@@ -18,6 +18,7 @@
   });
 
   const decisionSupportInflight=new Map();
+  const decisionSupportCache=new Map();
   const riskNum=v=>{const n=Number(v);return Number.isFinite(n)?n:NaN};
   const riskClamp=(x,a,b)=>Math.max(a,Math.min(b,x));
   const riskMean=values=>{const a=values.filter(Number.isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN};
@@ -25,7 +26,26 @@
   const riskMedian=arr=>riskPercentile(arr,.5);
   const riskSleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-  function riskScanState(){return window.CryptoOfferData?.scanState||null;}
+  function riskScannerStates(){
+    const d=window.CryptoOfferData||{};
+    return [d.longEntryConfirmState,d.squeezeLongState,d.rangeBreakoutState,d.coinScanForShortState,d.coinScanState,d.oneMScanState,d.bookScanState,d.shortScanState,d.scanState]
+      .filter(Boolean)
+      .sort((a,b)=>(Number(b?.completedAt)||Number(b?.startedAt)||0)-(Number(a?.completedAt)||Number(a?.startedAt)||0));
+  }
+  function rowSymbol(row){return String(row?.symbol||row?.coin||'').trim().toUpperCase();}
+  function riskFindRow(symbol){
+    const wanted=String(symbol||'').trim().toUpperCase();
+    for(const state of riskScannerStates()){
+      const rows=Array.isArray(state?.results)?state.results:[];
+      const found=rows.find(row=>rowSymbol(row)===wanted);
+      if(found){
+        const current=riskNum(found.currentPrice??found.decisionPrice??found.snapshot2??found.price);
+        return {...found,symbol:wanted,snapshot2:Number.isFinite(riskNum(found.snapshot2))?riskNum(found.snapshot2):current,decisionPrice:Number.isFinite(riskNum(found.decisionPrice))?riskNum(found.decisionPrice):current,currentPrice:current,price:current};
+      }
+    }
+    const tr=riskRow(wanted),current=riskNum(String(tr?.querySelector('[data-role="current-price"]')?.textContent||'').replace(/,/g,''));
+    return tr?{symbol:wanted,snapshot2:current,decisionPrice:current,currentPrice:current,price:current}:null;
+  }
   function riskRow(symbol){return [...document.querySelectorAll('#candidateBody tr[data-symbol]')].find(tr=>tr.dataset.symbol===symbol)||null;}
   function riskLog(msg){
     const el=document.getElementById('logBox');if(!el)return;
@@ -37,14 +57,9 @@
   async function riskFetchJson(url,{retries=3,timeout=15000,essential=false}={}){
     let lastErr;
     for(let attempt=0;attempt<=retries;attempt++){
-      const scan=riskScanState();
-      if(scan?.controller?.signal.aborted)throw new DOMException('Aborted','AbortError');
       const timeoutController=new AbortController();
       const timer=setTimeout(()=>timeoutController.abort(),timeout);
-      const onAbort=()=>timeoutController.abort();
-      scan?.controller?.signal.addEventListener('abort',onAbort,{once:true});
       try{
-        if(scan)scan.requestCount=(Number(scan.requestCount)||0)+1;
         const res=await fetch(url,{signal:timeoutController.signal,cache:'no-store',headers:{'Accept':'application/json'}});
         if(res.status===429||res.status===418){
           const retryAfter=Number(res.headers.get('Retry-After')),err=new Error(`HTTP ${res.status}`);
@@ -54,12 +69,11 @@
         return await res.json();
       }catch(e){
         lastErr=e;
-        if(e.name==='AbortError'&&scan?.controller?.signal.aborted)throw e;
         if(attempt<retries){const wait=Number.isFinite(e.retryDelayMs)?e.retryDelayMs:450*Math.pow(2,attempt);await riskSleep(wait);}
-      }finally{clearTimeout(timer);scan?.controller?.signal.removeEventListener('abort',onAbort);}
+      }finally{clearTimeout(timer);}
     }
     const msg=`API failed: ${url} → ${lastErr?.message||lastErr}`;
-    const scan=riskScanState();if(scan?.errors)scan.errors.push(msg);riskLog(msg);
+    riskLog(msg);
     if(essential)throw new Error(msg);return null;
   }
 
@@ -300,7 +314,8 @@
       riskFetchJson(`${RISK_BASE}/fapi/v1/depth?symbol=${encodeURIComponent(symbol)}&limit=100`,{retries:2,timeout:15000})
     ]);
     const liquidity=decisionOrderBookSlippage(book);
-    const currentPrice=Number.isFinite(liquidity.mid)&&liquidity.mid>0?liquidity.mid:riskNum(row.snapshot2);
+    const rowPrice=riskNum(row.currentPrice??row.decisionPrice??row.snapshot2??row.price);
+    const currentPrice=Number.isFinite(liquidity.mid)&&liquidity.mid>0?liquidity.mid:rowPrice;
     const priceLevel=computePriceLevel(c15,currentPrice,now);
     const riskLevel=computeRiskLevel(c5,c15,liquidity,now);
     return {loadedAt:now,currentPrice,priceLevel,riskLevel};
@@ -328,23 +343,24 @@
   }
 
   async function loadDecisionSupport(symbol){
-    const scan=riskScanState();if(scan?.running)return;
-    const row=(scan?.results||[]).find(x=>x.symbol===symbol);if(!row)return;
-    if(row.decisionSupport){updateDecisionSupportUI(symbol,row.decisionSupport);return;}
-    if(decisionSupportInflight.has(symbol))return decisionSupportInflight.get(symbol);
-    const before=Number(scan?.requestCount)||0;updateDecisionSupportUI(symbol,null,{loading:true});
+    const normalized=String(symbol||'').trim().toUpperCase();
+    const row=riskFindRow(normalized);if(!row)return;
+    const cached=decisionSupportCache.get(normalized);
+    if(cached){updateDecisionSupportUI(normalized,cached);return;}
+    if(decisionSupportInflight.has(normalized))return decisionSupportInflight.get(normalized);
+    updateDecisionSupportUI(normalized,null,{loading:true});
     const task=(async()=>{
       try{
-        const data=await computeDecisionSupport(row);row.decisionSupport=data;updateDecisionSupportUI(symbol,data);
-        riskLog(`Lazy PriceLevel/RiskLevel ${symbol}: ${((Number(riskScanState()?.requestCount)||0)-before)} API request • Price=${data.priceLevel.label} (${Number.isFinite(data.priceLevel.score)?(data.priceLevel.score*100).toFixed(1):'N/A'}) • Risk=${data.riskLevel.label} (${Number.isFinite(data.riskLevel.score)?(data.riskLevel.score*100).toFixed(1):'N/A'}).`);
+        const data=await computeDecisionSupport(row);decisionSupportCache.set(normalized,data);updateDecisionSupportUI(normalized,data);
+        riskLog(`Lazy PriceLevel/RiskLevel ${normalized}: Price=${data.priceLevel.label} (${Number.isFinite(data.priceLevel.score)?(data.priceLevel.score*100).toFixed(1):'N/A'}) • Risk=${data.riskLevel.label} (${Number.isFinite(data.riskLevel.score)?(data.riskLevel.score*100).toFixed(1):'N/A'}).`);
       }catch(e){
-        if(e.name==='AbortError')return;
-        riskLog(`Lazy PriceLevel/RiskLevel ${symbol} failed: ${e.message||e}`);
-        updateDecisionSupportUI(symbol,{priceLevel:{label:'N/A'},riskLevel:{label:'N/A'}},{error:true});
-      }finally{decisionSupportInflight.delete(symbol);}
+        riskLog(`Lazy PriceLevel/RiskLevel ${normalized} failed: ${e.message||e}`);
+        updateDecisionSupportUI(normalized,{priceLevel:{label:'N/A'},riskLevel:{label:'N/A'}},{error:true});
+      }finally{decisionSupportInflight.delete(normalized);}
     })();
-    decisionSupportInflight.set(symbol,task);return task;
+    decisionSupportInflight.set(normalized,task);return task;
   }
+
 
 
   document.getElementById('candidateBody').addEventListener('click',e=>{
@@ -352,7 +368,7 @@
     if(!btn)return;
     const symbol=btn.dataset.symbol;if(symbol)loadDecisionSupport(symbol);
   });
-  document.addEventListener('cryptooffer:scan-start',()=>decisionSupportInflight.clear());
+  document.addEventListener('cryptooffer:scan-start',()=>{decisionSupportInflight.clear();decisionSupportCache.clear();});
 
   window.CryptoFlowScanner=window.CryptoFlowScanner||{version:'V13.4',modules:{}};
   window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};

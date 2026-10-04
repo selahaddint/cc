@@ -711,20 +711,20 @@
   }
 
   async function startFollow(symbol){
-    const tr=followRow(symbol);if(!tr)return;
+    const tr=followRow(symbol);if(!tr)return false;
     const existing=followMonitors.get(symbol);
     if(existing&&existing.status!=='RED'){
       const manualReason='Manual Follow Stop';
       const manualPrice=Number.isFinite(existing.currentPrice)?existing.currentPrice:followDisplayedPrice(symbol);
       emitFollowReport(existing,{closeType:'MANUAL',exitPrice:manualPrice,reason:manualReason,closedAt:Date.now()});
       stopFollow(symbol,{reason:manualReason,reset:true});
-      return;
+      return false;
     }
     if(existing&&existing.status==='RED')stopFollow(symbol,{reason:'Restarting Follow',reset:false});
     const entry=followNum(tr.querySelector('[data-role="entry"]')?.value),stop=followNum(tr.querySelector('[data-role="stop"]')?.value);
-    if(!(entry>0)){setMonitorUI(symbol,'OFF','Entry Price girilmelidir.');return;}
-    if(!(stop>0)){setMonitorUI(symbol,'OFF','Stop Price girilmelidir.');return;}
-    if(!(stop<entry)){setMonitorUI(symbol,'OFF','LONG için Stop Price, Entry Price altında olmalıdır.');return;}
+    if(!(entry>0)){setMonitorUI(symbol,'OFF','Entry Price girilmelidir.');return false;}
+    if(!(stop>0)){setMonitorUI(symbol,'OFF','Stop Price girilmelidir.');return false;}
+    if(!(stop<entry)){setMonitorUI(symbol,'OFF','LONG için Stop Price, Entry Price altında olmalıdır.');return false;}
     const now=Date.now();
     const scanSource=followScanSource(tr);
     const preservedRow=captureFollowRowModel(symbol,existing);if(preservedRow)preservedRow.scanSource=scanSource;
@@ -734,6 +734,9 @@
     followMonitors.set(symbol,task);setLiveUI(symbol,'','');setMonitorUI(symbol,'GREEN','Follow starting…',now);
     await refreshFollow(symbol);
     const active=followMonitors.get(symbol);if(active&&active.status!=='RED'&&!active.timer)active.timer=setInterval(()=>refreshFollow(symbol),FOLLOW_CONFIG.refreshMs);
+    // A valid Follow session was started even if its very first refresh immediately
+    // decided EXIT/RED. Returning true prevents Watch from repeatedly re-starting it.
+    return true;
   }
 
 
@@ -776,5 +779,14 @@
 
   window.CryptoFlowScanner=window.CryptoFlowScanner||{version:'V13.4',modules:{}};
   window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};
-  window.CryptoFlowScanner.modules.follow={config:FOLLOW_CONFIG,liveConfig:FOLLOW_LIVE_CONFIG,getPreservedRows,restoreRowsUI:restoreFollowRowsUI};
+  window.CryptoFlowScanner.modules.follow={
+    config:FOLLOW_CONFIG,
+    liveConfig:FOLLOW_LIVE_CONFIG,
+    startFollow,
+    stopFollow,
+    isFollowing:symbol=>{const t=followMonitors.get(String(symbol||'').trim().toUpperCase());return !!t&&t.status!=='RED';},
+    getActiveSymbols:()=>[...followMonitors.values()].filter(t=>t&&t.status!=='RED').map(t=>t.symbol),
+    getPreservedRows,
+    restoreRowsUI:restoreFollowRowsUI
+  };
 })();

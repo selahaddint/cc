@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- UI Version: 14.40 — Lowest/Highest explicit button bridge -->
+<!-- UI Version: 14.45 — added standalone 2×1m Green scan -->
 <html lang="tr">
 <head>
 <meta charset="utf-8">
@@ -263,7 +263,7 @@ body{padding-top:54px;padding-bottom:24px}
         <div class="field"><label>MinY%</label><input id="minIncrease" type="number" min="0.01" max="100" step="0.01" value="0.40"></div>
         <div class="field"><label>MaxY%</label><input id="maxIncrease" type="number" min="0.01" max="100" step="0.01" value="3.00"></div>
       </div>
-      <div class="toolbar"><button id="startBtn" class="primary" type="button" title="Ana taramayı mevcut Sec., MinY% ve MaxY% ayarlarıyla başlatır">Start Scan</button><button id="startShortBtn" type="button" title="SHORT yönlü 4h–5m yapı ve giriş koşullarını tarar">StartScanForShort</button><button id="lowestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında düşen coinleri tarar">LowerScan</button><button id="highestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında yükselen coinleri tarar">HighestScan</button><button id="oneMScanBtn" type="button" title="OneM Scan algoritmasıyla erken LONG adaylarını ve giriş uygunluğunu tarar">OneM Scan</button><button id="bookScanBtn" type="button" title="Kitap/Blueprint kurallarıyla erken LONG setup ve giriş uygunluğunu tarar">Book Scan</button><button id="coinScanBtn" type="button" title="Blueprint V2 kurallarıyla LONG adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScan</button><button id="coinScanForShortBtn" type="button" title="Blueprint V2 kurallarıyla SHORT adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScanForShort</button><div class="rangeScanControl"><select id="rangePeriod" aria-label="Range tarama dönemi" title="Geçmişteki gezinme/range yapısının inceleneceği dönem"><option value="2M">2 Ay</option><option value="1M" selected>1 Ay</option><option value="1W">1 Hafta</option><option value="3D">3 Gün</option><option value="1D">1 Gün</option><option value="8H">8 Saat</option><option value="4H">4 Saat</option><option value="1H">1 Saat</option><option value="15M">15 Dakika</option><option value="5M">5 Dakika</option></select></div><button id="rangeBreakoutScanBtn" type="button" title="Seçilen dönemdeki yatay/range bölgesini bulur; taze üst kırılım oluşursa SELECT üretir">Range Scan</button><div class="squeezeScanControl"><select id="squeezeTimeframe" aria-label="Squeeze Long zaman dilimi" title="EMA200 + Squeeze Momentum + MACD LONG taramasının mum zaman dilimi"><option value="1m">1 Dakika</option><option value="3m">3 Dakika</option><option value="5m" selected>5 Dakika</option><option value="15m">15 Dakika</option><option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="2h">2 Saat</option><option value="4h">4 Saat</option></select></div><button id="squeezeLongScanBtn" type="button" title="AllowedCoins listesindeki tüm coinleri seçili zaman diliminde EMA200, Squeeze Momentum ve MACD ile tarar">Squeeze Long</button><button id="longEntryConfirmBtn" type="button" title="AllowedCoins listesindeki tüm coinleri 4H, 15m BOS, likidite süpürmesi, FVG/Fib ve R/R koşullarıyla tarar">Long Confirm</button><button id="watchBtn" type="button" title="Griddeki SELECT coinleri LONG giriş zamanlaması için izlemeye başlar">Watch</button><button id="reportBtn" type="button" title="Tarama geçmişi raporunu açar">Report</button><button id="followReportBtn" type="button" title="Follow işlem geçmişi raporunu açar">FollowReport</button><label class="autoScanToggle" for="autoScan" title="İşaretliyken scan tamamlandıktan 2 dakika sonra yeni scan otomatik başlar."><input id="autoScan" type="checkbox"><span>Auto 2m</span><span id="autoScanCountdown" class="autoScanCountdown">—</span></label><button id="cancelBtn" class="danger" type="button" title="Devam eden tarama işlemini iptal eder" disabled>Cancel</button><button id="refreshRankBtn" class="toolbarHidden" type="button" title="Activity Rank önbelleğini yeniler" aria-hidden="true" tabindex="-1">Refresh Activity Rank</button><button id="clearEventsBtn" class="toolbarHidden" type="button" title="Fast Event Watch kayıtlarını temizler" aria-hidden="true" tabindex="-1">Clear Event Watch</button><button id="csvBtn" class="toolbarHidden" type="button" title="Tarama adaylarını CSV dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Candidate CSV</button><button id="jsonBtn" class="toolbarHidden" type="button" title="Tarama sonuçlarını JSON dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Scan JSON</button></div>
+      <div class="toolbar"><button id="startBtn" class="primary" type="button" title="Ana taramayı mevcut Sec., MinY% ve MaxY% ayarlarıyla başlatır">Start Scan</button><button id="startScan153Btn" type="button" title="StartScan kurallarını 15m ana trend, 5m setup ve 3m confirmation ile çalıştırır">15m-5m-3m Scan</button><button id="startScan531Btn" type="button" title="StartScan kurallarını 5m ana trend, 3m setup ve 1m confirmation ile çalıştırır">5m-3m-1m Scan</button><button id="last2Green1mScanBtn" type="button" title="Sadece kapanmış son iki 1 dakikalık mumun ikisi de yeşilse SELECT üretir; başka seçim şartı uygulamaz">2×1m Green</button><button id="startShortBtn" type="button" title="SHORT yönlü 4h–5m yapı ve giriş koşullarını tarar">StartScanForShort</button><button id="lowestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında düşen coinleri tarar">LowerScan</button><button id="highestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında yükselen coinleri tarar">HighestScan</button><button id="oneMScanBtn" type="button" title="OneM Scan algoritmasıyla erken LONG adaylarını ve giriş uygunluğunu tarar">OneM Scan</button><button id="bookScanBtn" type="button" title="Kitap/Blueprint kurallarıyla erken LONG setup ve giriş uygunluğunu tarar">Book Scan</button><button id="coinScanBtn" type="button" title="Blueprint V2 kurallarıyla LONG adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScan</button><button id="coinScanForShortBtn" type="button" title="Blueprint V2 kurallarıyla SHORT adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScanForShort</button><div class="rangeScanControl"><select id="rangePeriod" aria-label="Range tarama dönemi" title="Geçmişteki gezinme/range yapısının inceleneceği dönem"><option value="2M">2 Ay</option><option value="1M" selected>1 Ay</option><option value="1W">1 Hafta</option><option value="3D">3 Gün</option><option value="1D">1 Gün</option><option value="8H">8 Saat</option><option value="4H">4 Saat</option><option value="1H">1 Saat</option><option value="15M">15 Dakika</option><option value="5M">5 Dakika</option></select></div><button id="rangeBreakoutScanBtn" type="button" title="Seçilen dönemdeki yatay/range bölgesini bulur; taze üst kırılım oluşursa SELECT üretir">Range Scan</button><div class="squeezeScanControl"><select id="squeezeTimeframe" aria-label="Squeeze Long zaman dilimi" title="EMA200 + Squeeze Momentum + MACD LONG taramasının mum zaman dilimi"><option value="1m">1 Dakika</option><option value="3m">3 Dakika</option><option value="5m" selected>5 Dakika</option><option value="15m">15 Dakika</option><option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="2h">2 Saat</option><option value="4h">4 Saat</option></select></div><button id="squeezeLongScanBtn" type="button" title="AllowedCoins listesindeki tüm coinleri seçili zaman diliminde EMA200, Squeeze Momentum ve MACD ile tarar">Squeeze Long</button><button id="longEntryConfirmBtn" type="button" title="AllowedCoins listesindeki tüm coinleri 4H, 15m BOS, likidite süpürmesi, FVG/Fib ve R/R koşullarıyla tarar">Long Confirm</button><button id="watchBtn" type="button" title="Griddeki SELECT coinleri LONG giriş zamanlaması için izlemeye başlar">Watch</button><button id="reportBtn" type="button" title="Tarama geçmişi raporunu açar">Report</button><button id="followReportBtn" type="button" title="Follow işlem geçmişi raporunu açar">FollowReport</button><label class="autoScanToggle" for="autoScan" title="İşaretliyken scan tamamlandıktan 2 dakika sonra yeni scan otomatik başlar."><input id="autoScan" type="checkbox"><span>Auto 2m</span><span id="autoScanCountdown" class="autoScanCountdown">—</span></label><button id="cancelBtn" class="danger" type="button" title="Devam eden tarama işlemini iptal eder" disabled>Cancel</button><button id="refreshRankBtn" class="toolbarHidden" type="button" title="Activity Rank önbelleğini yeniler" aria-hidden="true" tabindex="-1">Refresh Activity Rank</button><button id="clearEventsBtn" class="toolbarHidden" type="button" title="Fast Event Watch kayıtlarını temizler" aria-hidden="true" tabindex="-1">Clear Event Watch</button><button id="csvBtn" class="toolbarHidden" type="button" title="Tarama adaylarını CSV dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Candidate CSV</button><button id="jsonBtn" class="toolbarHidden" type="button" title="Tarama sonuçlarını JSON dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Scan JSON</button></div>
       <div class="status" id="mainStatus">Hazır. Start Scan ile tarama başlayacak.</div>
       <div class="progressShell"><div class="progressBar" id="progressBar"></div></div>
       <div class="stageLine"><span id="stageText">Idle</span><span id="progressText">0%</span></div>
@@ -407,10 +407,13 @@ body{padding-top:54px;padding-bottom:24px}
 <script src="js/ReportStore.js?v=14.40"></script>
 <script src="js/CoinUniverse.js"></script>
 <script src="js/StartScan.js?v=14.19"></script>
+<script src="js/StartScan15m5m3m.js?v=14.44"></script>
+<script src="js/StartScan5m3m1m.js?v=14.44"></script>
 <script src="js/StartScanForShort.js?v=14.40"></script>
 <!-- LowestScan.js is the canonical module name. LowerScan.js is accepted only as a filename fallback. -->
 <script src="js/LowestScan.js?v=14.28" onerror="this.onerror=null;this.src='js/LowerScan.js?v=14.28';"></script>
 <script src="js/HighestScan.js?v=14.39"></script>
+<script src="js/Last2Green1mScan.js?v=1.0"></script>
 
 <script>
 (() => {
@@ -463,6 +466,8 @@ body{padding-top:54px;padding-bottom:24px}
   }
 
   function init() {
+    bindScanButton('startScan153Btn', 'StartScan153', '15m-5m-3m Scan', 'StartScan15m5m3m.js');
+    bindScanButton('startScan531Btn', 'StartScan531', '5m-3m-1m Scan', 'StartScan5m3m1m.js');
     bindScanButton('lowestScanBtn', 'LowestScan', 'LowerScan', 'LowestScan.js');
     bindScanButton('highestScanBtn', 'HighestScan', 'HighestScan', 'HighestScan.js');
   }
@@ -1971,6 +1976,8 @@ body{padding-top:54px;padding-bottom:24px}
 
   function currentCandidate(symbol){
     const normalState = window.CryptoOfferData?.scanState;
+    const scan153State = window.CryptoOfferData?.scan153State;
+    const scan531State = window.CryptoOfferData?.scan531State;
     const shortState = window.CryptoOfferData?.shortScanState;
     const bookState = window.CryptoOfferData?.bookScanState;
     const coinState = window.CryptoOfferData?.coinScanState;
@@ -1978,7 +1985,7 @@ body{padding-top:54px;padding-bottom:24px}
     const rangeState = window.CryptoOfferData?.rangeBreakoutState;
     const longConfirmState = window.CryptoOfferData?.longEntryConfirmState;
     const squeezeState = window.CryptoOfferData?.squeezeLongState;
-    const scannerStates = [normalState, shortState, bookState, coinState, coinShortState, longConfirmState, squeezeState, rangeState]
+    const scannerStates = [normalState, scan153State, scan531State, shortState, bookState, coinState, coinShortState, longConfirmState, squeezeState, rangeState]
       .filter(Boolean)
       .sort((a,b)=>(Number(b?.startedAt)||0)-(Number(a?.startedAt)||0));
 
@@ -2046,11 +2053,13 @@ body{padding-top:54px;padding-bottom:24px}
       return 'Final Decision';
     }
 
-    if (c.step7?.regime === 'DOWNTREND') return '1h';
+    const tf=r?.scanTimeframes || {};
+    const trendTf=tf.trend || '1h', setupTf=tf.setup || '15m', confirmTf=tf.confirm || '5m';
+    if (c.step7?.regime === 'DOWNTREND') return `${trendTf} Trend`;
     const f=c.entryFreshness, e=c.entryImpulse;
     if (!f || ['UNAVAILABLE','CALIBRATING'].includes(f.status) || !e || ['UNAVAILABLE','BEARISH'].includes(e.status)) return 'Freshness / Elder';
-    if (c.step8?.status !== 'PASS') return '15m Setup';
-    if (c.step9?.status !== 'CONFIRMED') return '5m Confirm';
+    if (c.step8?.status !== 'PASS') return `${setupTf} Setup`;
+    if (c.step9?.status !== 'CONFIRMED') return `${confirmTf} Confirm`;
     if (c.step10?.status !== 'READY') return 'Trigger / Zone';
     const rr=c.priceLocation?.structuralAsymmetry;
     if (!(rr === Infinity || finite(rr)) || (finite(rr) && Number(rr) < 1)) return 'R/R';
@@ -2065,7 +2074,9 @@ body{padding-top:54px;padding-bottom:24px}
     const fast=`${pct(r?.fastChange)}${finite(r?.fastEventTime) ? ` • ${when(r.fastEventTime)}` : ''}`;
     const liquidity=`PASS • Spread ${pct(r?.liveSpread)} • Depth ${compact(r?.liveDepth)} USDT`;
     const oi=`${esc(r?.oiShortStatus || 'PASS')} • 5m ${pct(r?.deltaOi5)} • 15m ${pct(r?.deltaOi15)}`;
-    const oneHour=`${esc(c.step7?.regime || r?.trend1hRegime || '—')}${c.step7?.reason ? ` — ${esc(c.step7.reason)}` : ''}`;
+    const tf=r?.scanTimeframes || {};
+    const trendTf=tf.trend || '1h', setupTf=tf.setup || '15m', confirmTf=tf.confirm || '5m';
+    const trendLine=`${esc(c.step7?.regime || r?.trend1hRegime || '—')}${c.step7?.reason ? ` — ${esc(c.step7.reason)}` : ''}`;
     const setup=`${esc(c.step8?.status || '—')}${c.step8?.setup ? ` / ${esc(c.step8.setup)}` : ''}${c.step8?.reason ? ` — ${esc(c.step8.reason)}` : ''}`;
     const confirm=`${esc(c.step9?.status || '—')}${c.step9?.score ? ` • ${esc(c.step9.score)}` : ''} • RSI ${passFail(checks.rsi)} • MACD ${passFail(checks.macd)} • ATR ${passFail(checks.atr)}${c.step9?.reason ? ` — ${esc(c.step9.reason)}` : ''}`;
     const trigger=`${esc(c.step10?.status || '—')}${c.step10?.reason ? ` — ${esc(c.step10.reason)}` : ''}`;
@@ -2146,7 +2157,7 @@ body{padding-top:54px;padding-bottom:24px}
         ['Liquidity',liquidity],
         ['OI',oi],
         ['Book Move',moveText],
-        ['1h Context',oneHour],
+        ['1h Context',trendLine],
         ['15m Structure / Setup',setup],
         ['5m Trigger',confirm],
         ['Volume',volumeText],
@@ -2158,8 +2169,8 @@ body{padding-top:54px;padding-bottom:24px}
 
     const fresh=`Freshness ${esc(c.entryFreshness?.status || r?.entryFreshness?.status || '—')}${(c.entryFreshness?.reason || r?.entryFreshness?.reason) ? ` — ${esc(c.entryFreshness?.reason || r.entryFreshness.reason)}` : ''} | Elder ${esc(c.entryImpulse?.status || r?.entryImpulse?.status || '—')}${(c.entryImpulse?.reason || r?.entryImpulse?.reason) ? ` — ${esc(c.entryImpulse?.reason || r.entryImpulse.reason)}` : ''}`;
     return [
-      ['Fast Event',fast],['Liquidity',liquidity],['OI',oi],['1h',oneHour],['Freshness / Elder',fresh],
-      ['15m Setup',setup],['5m Confirm',confirm],['Trigger / Zone',trigger],['R/R',rrDetail],['Final Result',final]
+      ['Fast Event',fast],['Liquidity',liquidity],['OI',oi],[`${trendTf} Trend`,trendLine],['Freshness / Elder',fresh],
+      [`${setupTf} Setup`,setup],[`${confirmTf} Confirm`,confirm],['Trigger / Zone',trigger],['R/R',rrDetail],['Final Result',final]
     ];
   }
 
@@ -2198,6 +2209,8 @@ body{padding-top:54px;padding-bottom:24px}
   function updateCandidateTitle(){
     const d=window.CryptoOfferData || {};
     const normal=d.scanState;
+    const scan153=d.scan153State;
+    const scan531=d.scan531State;
     const short=d.shortScanState;
     const book=d.bookScanState;
     const coin=d.coinScanState;
@@ -2205,8 +2218,8 @@ body{padding-top:54px;padding-bottom:24px}
     const range=d.rangeBreakoutState;
     const squeeze=d.squeezeLongState;
     const longConfirm=d.longEntryConfirmState;
-    const states=[longConfirm,squeeze,range,coinShort,coin,short,book,normal]
-      .filter(Boolean)
+    const states=[longConfirm,squeeze,range,coinShort,coin,short,book,scan531,scan153,normal]
+      .filter(x=>x && (Number(x?.startedAt)>0 || Number(x?.completedAt)>0 || (Array.isArray(x?.results)&&x.results.length)))
       .sort((a,b)=>(Number(b?.completedAt)||Number(b?.startedAt)||0)-(Number(a?.completedAt)||Number(a?.startedAt)||0));
     const latest=states[0] || null;
     const rows=latest?.results;
@@ -2216,7 +2229,7 @@ body{padding-top:54px;padding-bottom:24px}
       if (finite(started) && Number(started)>0) stamp=new Intl.DateTimeFormat('tr-TR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(Number(started)));
     }
     const match=String(stamp||'').match(/(\d{2}:\d{2})/);
-    const source=latest===longConfirm ? 'Long Confirm' : latest===squeeze ? `Squeeze Long${squeeze?.timeframeLabel ? ` ${squeeze.timeframeLabel}` : ''}` : latest===range ? `Range Scan${range?.periodLabel ? ` ${range.periodLabel}` : ''}` : latest===coinShort ? 'CoinScanForShort' : latest===coin ? 'CoinScan' : latest===short ? 'StartScanForShort' : latest===book ? 'Book Scan' : 'Candidate Response';
+    const source=latest===longConfirm ? 'Long Confirm' : latest===squeeze ? `Squeeze Long${squeeze?.timeframeLabel ? ` ${squeeze.timeframeLabel}` : ''}` : latest===range ? `Range Scan${range?.periodLabel ? ` ${range.periodLabel}` : ''}` : latest===coinShort ? 'CoinScanForShort' : latest===coin ? 'CoinScan' : latest===short ? 'StartScanForShort' : latest===book ? 'Book Scan' : latest===scan531 ? '5m-3m-1m Scan' : latest===scan153 ? '15m-5m-3m Scan' : latest===normal ? 'Start Scan' : 'Candidate Response';
     title.textContent=match ? `${source} - ${match[1]}` : source;
   }
 

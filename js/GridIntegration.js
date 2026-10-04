@@ -16,6 +16,8 @@
 
   const SOURCE_BY_BUTTON = Object.freeze({
     startBtn: 'Start Scan',
+    startScan153Btn: '15m-5m-3m Scan',
+    startScan531Btn: '5m-3m-1m Scan',
     startShortBtn: 'StartScanForShort',
     lowestScanBtn: 'LowerScan',
     highestScanBtn: 'Highest Scan',
@@ -40,6 +42,8 @@
   function normalizeSource(value) {
     const s = String(value || '').trim();
     if (!s) return '';
+    if (/15m.*5m.*3m|153/i.test(s)) return '15m-5m-3m Scan';
+    if (/5m.*3m.*1m|531/i.test(s)) return '5m-3m-1m Scan';
     if (/start.*short/i.test(s)) return 'StartScanForShort';
     if (/start.*scan/i.test(s)) return 'Start Scan';
     if (/lowest|lower/i.test(s)) return 'LowerScan';
@@ -240,13 +244,21 @@
     else setTimeout(run, 0);
   }
 
-  document.addEventListener('cryptooffer:candidates-rendered', scheduleDecorate);
+  document.addEventListener('cryptooffer:candidates-rendered', () => {
+    // Follow and Watch own their persistent rows. Restore both before normalizing
+    // the newly rendered grid so another scanner cannot make either session vanish.
+    try { window.CryptoFlowScanner?.modules?.follow?.restoreRowsUI?.(); } catch (_) {}
+    try { window.Watch?.restoreRowsUI?.(); } catch (_) {}
+    scheduleDecorate();
+  });
 
   function cancelAllScans() {
     // Call every known public cancellation endpoint. Each implementation is
     // idempotent when idle, so this remains safe with the shared Cancel button.
     const calls = [
       () => window.CryptoFlowScanner?.modules?.startScan?.state?.controller?.abort?.(),
+      () => window.StartScan153?.cancel?.(),
+      () => window.StartScan531?.cancel?.(),
       () => window.CryptoFlowScanner?.modules?.startScanForShort?.cancel?.(),
       () => window.CryptoFlowScanner?.modules?.oneMScan?.cancel?.(),
       () => window.CryptoFlowScanner?.modules?.bookScan?.cancel?.(),

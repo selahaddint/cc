@@ -4,7 +4,8 @@
  * Purpose:
  *   - Reads SELECT rows already present in #candidateBody.
  *   - Does NOT select coins and does NOT modify scanner logic.
- *   - Does NOT modify Follow state, inputs, buttons, timers or decisions.
+ *   - Watches only SELECT rows captured when Watch starts.
+ *   - GREEN / ENTRY automatically hands that symbol off to Follow once.
  *   - Assumes the SELECT stage already handled higher-timeframe direction/context.
  *   - Watch itself only handles short-term LONG entry timing with 3m + 1m.
  *
@@ -37,11 +38,16 @@
 
   const cache = new Map();
   const signals = new Map();
+  // Frozen Watch session: only SELECT rows that exist when Watch is started are tracked.
+  // New scanner results never join the active Watch session automatically.
+  const watchedSymbols = new Set();
+  const watchRowDomCache = new Map();
+  const autoFollowTriggered = new Set();
+  const autoFollowInFlight = new Set();
   let active = false;
   let running = false;
   let rerunRequested = false;
   let timer = null;
-  let mutationTimer = null;
   let cycleController = null;
   let cooldownUntil = 0;
 
@@ -130,30 +136,35 @@
     }
   }
 
+  function renderOff(tr, reason = 'Watch yalnız aktif Watch oturumundaki SELECT satırlarını değerlendirir.') {
+    const cell = ensureWatchCell(tr);
+    if (!cell) return;
+    cell.replaceChildren();
+    const badge = document.createElement('span');
+    badge.className = 'watchSignal off';
+    badge.title = reason;
+    const dot = document.createElement('span');
+    dot.className = 'watchSignalDot';
+    badge.appendChild(dot);
+    const text = document.createElement('span');
+    text.textContent = '—';
+    badge.appendChild(text);
+    cell.appendChild(badge);
+  }
+
   function syncCells() {
     body.querySelectorAll('td.empty').forEach(td => { td.colSpan = 16; });
     body.querySelectorAll('tr[data-symbol]').forEach(tr => {
       const symbol = symbolOf(tr);
       if (!symbol) return;
-      if (!isSelectRow(tr)) {
-        const cell = ensureWatchCell(tr);
-        if (cell) {
-          cell.replaceChildren();
-          const badge = document.createElement('span');
-          badge.className = 'watchSignal off';
-          badge.title = 'Watch yalnız SELECT satırlarını değerlendirir.';
-          const dot = document.createElement('span');
-          dot.className = 'watchSignalDot';
-          badge.appendChild(dot);
-          const text = document.createElement('span');
-          text.textContent = '—';
-          badge.appendChild(text);
-          cell.appendChild(badge);
-        }
+      const isWatched = active && watchedSymbols.has(symbol);
+      const wasAutoFollowed = autoFollowTriggered.has(symbol);
+      if (!isSelectRow(tr) || (!isWatched && !wasAutoFollowed)) {
+        renderOff(tr);
         return;
       }
       const signal = signals.get(symbol);
-      renderSignal(tr, signal || (active
+      renderSignal(tr, signal || (isWatched
         ? { status: 'YELLOW', label: 'WAIT', reason: 'İlk Watch kontrolü bekleniyor.', at: 0 }
         : null));
     });
@@ -463,10 +474,104 @@
     return Array.from(body.querySelectorAll('tr[data-symbol]')).filter(tr => symbolOf(tr) === symbol);
   }
 
+  function snapshotWatchRow(tr, symbol) {
+    if (!tr || !symbol) return null;
+    const clone = tr.cloneNode(true);
+    clone.dataset.watchPreserved = 'true';
+    clone.dataset.watchSymbol = symbol;
+    watchRowDomCache.set(symbol, clone);
+    return clone;
+  }
+
+  function restoreWatchRowsUI() {
+    if (!active || !watchedSymbols.size) return;
+    const followRows = Array.from(body.querySelectorAll(':scope > tr[data-follow-preserved="true"]'));
+    let anchor = followRows.length ? followRows.at(-1).nextSibling : body.firstChild;
+
+    for (const symbol of Array.from(watchedSymbols)) {
+      // Follow owns persistence once a symbol is already being followed (manual or automatic).
+      // Never let Watch replace an active Follow row for the same symbol.
+      if (followApi()?.isFollowing?.(symbol)) {
+        watchedSymbols.delete(symbol);
+        watchRowDomCache.delete(symbol);
+        continue;
+      }
+      let tr = rowsForSymbol(symbol)[0] || null;
+      const isOwned = tr?.dataset?.watchPreserved === 'true';
+      if (!isOwned) {
+        const cached = watchRowDomCache.get(symbol);
+        if (!cached) continue;
+        const clone = cached.cloneNode(true);
+        clone.dataset.watchPreserved = 'true';
+        clone.dataset.watchSymbol = symbol;
+        // Remove a duplicate supplied by the new scan; the original watched row owns this symbol.
+        rowsForSymbol(symbol).forEach(row => row.remove());
+        body.insertBefore(clone, anchor);
+        tr = clone;
+      } else if (tr && tr !== anchor) {
+        body.insertBefore(tr, anchor);
+      }
+      if (tr) {
+        const sig = signals.get(symbol) || { status: 'YELLOW', label: 'WAIT', reason: 'Watch devam ediyor; yeni kontrol bekleniyor.', at: 0 };
+        renderSignal(tr, sig);
+        anchor = tr.nextSibling;
+      }
+    }
+  }
+
+  function watchedItems() {
+    restoreWatchRowsUI();
+    return Array.from(watchedSymbols).map(symbol => ({ symbol, tr: rowsForSymbol(symbol)[0] || null }));
+  }
+
+  function followApi() {
+    return window.CryptoFlowScanner?.modules?.follow || null;
+  }
+
+  async function maybeAutoFollow(symbol, result) {
+    if (!active || !watchedSymbols.has(symbol) || String(result?.status || '').toUpperCase() !== 'GREEN') return;
+    if (autoFollowTriggered.has(symbol) || autoFollowInFlight.has(symbol)) return;
+
+    const api = followApi();
+    if (api?.isFollowing?.(symbol)) {
+      autoFollowTriggered.add(symbol);
+      watchedSymbols.delete(symbol);
+      watchRowDomCache.delete(symbol);
+      return;
+    }
+
+    restoreWatchRowsUI();
+    const tr = rowsForSymbol(symbol)[0] || null;
+    const followBtn = tr?.querySelector('[data-action="follow"]');
+    if (!tr || !followBtn) return;
+
+    autoFollowInFlight.add(symbol);
+    try {
+      let started = false;
+      if (typeof api?.startFollow === 'function') {
+        started = (await api.startFollow(symbol)) === true || !!api?.isFollowing?.(symbol);
+      } else {
+        followBtn.click();
+        started = true;
+      }
+      if (started) {
+        autoFollowTriggered.add(symbol);
+        watchedSymbols.delete(symbol);
+        watchRowDomCache.delete(symbol);
+        delete tr.dataset.watchPreserved;
+        delete tr.dataset.watchSymbol;
+        window.dispatchEvent(new CustomEvent('watch:auto-follow', { detail: { symbol, at: now() } }));
+      }
+    } finally {
+      autoFollowInFlight.delete(symbol);
+    }
+  }
+
   function publish(symbol, result) {
     signals.set(symbol, result);
     rowsForSymbol(symbol).forEach(tr => renderSignal(tr, result));
     window.dispatchEvent(new CustomEvent('watch:signal', { detail: { symbol, ...result } }));
+    if (String(result?.status || '').toUpperCase() === 'GREEN') void maybeAutoFollow(symbol, result);
   }
 
   async function processQueue(items, signal) {
@@ -502,7 +607,7 @@
     if (!active) return;
     if (running) { rerunRequested = true; return; }
 
-    const items = selectRows();
+    const items = watchedItems();
     syncCells();
     if (!items.length) {
       button.title = 'Watch aktif ancak grid üzerinde SELECT satırı yok.';
@@ -545,16 +650,28 @@
       setMainStatus('Watch başlatılamadı: grid üzerinde SELECT satırı yok.', 'warn');
       return false;
     }
+
+    // A Watch session is immutable: capture ONLY the SELECT rows visible now.
+    signals.clear();
+    watchedSymbols.clear();
+    watchRowDomCache.clear();
+    autoFollowTriggered.clear();
+    autoFollowInFlight.clear();
+    for (const { tr, symbol } of items) {
+      watchedSymbols.add(symbol);
+      snapshotWatchRow(tr, symbol);
+    }
+
     active = true;
     button.textContent = 'Stop Watch';
     button.classList.add('watchActiveBtn');
     button.setAttribute('aria-pressed', 'true');
-    items.forEach(({ tr, symbol }) => renderSignal(tr, signals.get(symbol) || {
+    items.forEach(({ tr, symbol }) => renderSignal(tr, {
       status: 'YELLOW', label: 'WAIT', reason: 'İlk Watch kontrolü bekleniyor.', at: 0
     }));
     scheduleNext();
     runCycle();
-    window.dispatchEvent(new CustomEvent('watch:started'));
+    window.dispatchEvent(new CustomEvent('watch:started', { detail: { symbols: Array.from(watchedSymbols) } }));
     return true;
   }
 
@@ -565,10 +682,13 @@
     timer = null;
     if (cycleController) cycleController.abort();
     cycleController = null;
+    watchedSymbols.clear();
+    watchRowDomCache.clear();
+    autoFollowInFlight.clear();
     button.textContent = 'Watch';
     button.classList.remove('watchActiveBtn');
     button.setAttribute('aria-pressed', 'false');
-    button.title = 'Griddeki SELECT coinleri her zaman LONG giriş zamanlaması için izler';
+    button.title = 'Griddeki SELECT coinlerini LONG giriş zamanlaması için izler';
     window.dispatchEvent(new CustomEvent('watch:stopped'));
   }
 
@@ -577,22 +697,18 @@
     else start();
   });
 
-  const observer = new MutationObserver(mutations => {
-    // Ignore DOM mutations produced only by Watch's own status cell. This
-    // prevents an observer/render loop while still reacting to scanner or
-    // Follow row replacements.
-    const externalMutation = mutations.some(m => {
-      const target = m.target?.nodeType === 1 ? m.target : m.target?.parentElement;
-      return !target?.closest?.('td[data-role="watch-status"]');
-    });
-    if (!externalMutation) return;
-    clearTimeout(mutationTimer);
-    mutationTimer = setTimeout(() => {
-      syncCells();
-      if (active) runCycle();
-    }, 120);
+  // Persistence is event-driven. Every integrated scanner dispatches
+  // cryptooffer:candidates-rendered after replacing the grid. Watch then restores
+  // the frozen Watch rows, while Follow independently restores active Follow rows.
+  document.addEventListener('cryptooffer:scan-start', () => {
+    if (active) restoreWatchRowsUI();
   });
-  observer.observe(body, { childList: true, subtree: true });
+  document.addEventListener('cryptooffer:candidates-rendered', () => {
+    restoreWatchRowsUI();
+    syncCells();
+    if (active) runCycle();
+  });
+
 
   syncCells();
   button.setAttribute('aria-pressed', 'false');
@@ -601,11 +717,15 @@
     start,
     stop,
     scanNow: runCycle,
+    restoreRowsUI: restoreWatchRowsUI,
+    getWatchedSymbols: () => Array.from(watchedSymbols),
     analyzeSymbol: async symbol => evaluate(String(symbol || '').trim().toUpperCase(), new AbortController().signal),
     getState: () => ({
       active,
       running,
       cooldownUntil,
+      watchedSymbols: Array.from(watchedSymbols),
+      autoFollowTriggered: Array.from(autoFollowTriggered),
       signals: Object.fromEntries(Array.from(signals.entries()))
     }),
     config: CONFIG

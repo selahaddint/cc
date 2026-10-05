@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  // VARIANT: EARLY ENTRY — 5m direction -> pre-existing 3m setup -> LIVE 1m trigger. No 15m/1h/4h selection gate.
+  // VARIANT: primary trend 5m -> setup 3m -> confirmation 1m. No 15m/1h/4h selection gate.
 
   // ================================================================
   // START SCAN 5m/3m/1m MODULE
@@ -70,27 +70,6 @@
   // 5m = primary structure/trend, 3m = setup, 1m = confirmation + live timing.
   // Closed candles own EMA/MACD/RSI/ATR/setup logic; current candles are timing gates only.
   const LIVE_CANDLE_CONFIG=Object.freeze({neutralAtr:0.10,strongDownAtrPrimary:0.25});
-
-  // Early-entry tuning for the 5m/3m/1m scanner.
-  // Goal: use 5m only as direction, 3m as a pre-existing setup, and the LIVE 1m
-  // candle as the trigger. This avoids waiting for a second large closed 1m candle.
-  const EARLY_ENTRY_CONFIG=Object.freeze({
-    snapshotMaxSec:15,
-    rateMinFloorPct:0.08,
-    earlyMinFactor:0.60,
-    maxStrongCandidates:12,
-    maxEarlyExtras:6,
-    prepLookback3m:3,
-    prepEmaGapMinAtr:-0.08,
-    prepValueMaxAtr:0.45,
-    prepRsiFloor:47,
-    breakoutLookback1m:3,
-    breakoutBufferAtr1:0.01,
-    liveBodyMinAtr1:0.10,
-    projectedVolumeMinRatio:0.70,
-    liveSupportScoreMin:2,
-    maxBurst2mAtr1:2.20
-  });
 
   const $=id=>document.getElementById(id);
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -186,7 +165,6 @@
     log(`Gate Diagnostics: Fast ${g.fastEvents} | Liquidity ${g.liquidityDrop} | OI ${g.oiDrop} | Data ${g.dataDrop} | Operational ${g.operationalDrop} | Entry ${g.entryAnalyzed} | EntryError ${g.entryError} | 5mTrendBlock ${g.oneHourBlock} | 5mTransition(info) ${g.oneHourTransition} | Fresh/Elder ${g.freshnessElder} | 3mSetup ${g.setup15m} | 1mConfirm ${g.confirm5m} [timing ${d.timing}; 1/3 ${d.score1}; 2/3 ${d.score2}; closedVOLweak ${d.weakClosedVolume}; fail R/M/A ${d.failRsi}/${d.failMacd}/${d.failAtr}] | Trigger/Zone ${g.triggerZone} | R/R ${g.rr} | Soft ${g.softCaution} | SELECT ${g.select}`);
   }
   const AUTO_SCAN_INTERVAL_MS=2*60*1000;
-  const SCAN_SETTINGS_STORAGE_KEY='Precise15.ScanSettings.v1';
   let autoScanTimer=null;
   let autoScanDeadline=NaN;
   let autoScanCountdownTimer=null;
@@ -215,48 +193,6 @@
     autoScanCountdownTimer=setInterval(updateAutoScanCountdown,1000);
   }
 
-  function saveScanSettings(){
-    const windowSec=num($('windowSec')?.value);
-    const minIncrease=num($('minIncrease')?.value);
-    const maxIncrease=num($('maxIncrease')?.value);
-    const autoScan=!!$('autoScan')?.checked;
-    const settings={
-      windowSec:Number.isFinite(windowSec)?windowSec:60,
-      minIncrease:Number.isFinite(minIncrease)?minIncrease:0.5,
-      maxIncrease:Number.isFinite(maxIncrease)?maxIncrease:4,
-      autoScan
-    };
-    try{localStorage.setItem(SCAN_SETTINGS_STORAGE_KEY,JSON.stringify(settings));}
-    catch(e){log(`Scan Settings save failed: ${e.message||e}`);}
-  }
-
-  function loadScanSettings(){
-    try{
-      const raw=localStorage.getItem(SCAN_SETTINGS_STORAGE_KEY);
-      if(!raw)return false;
-      const saved=JSON.parse(raw);
-      let windowSec=Number(saved?.windowSec);
-      let minIncrease=Number(saved?.minIncrease);
-      let maxIncrease=Number(saved?.maxIncrease);
-
-      // Migrate only the previous recommended defaults.
-      // User-customized values are preserved.
-      if(windowSec===15&&minIncrease===1.5&&maxIncrease===5){
-        windowSec=60;minIncrease=0.5;maxIncrease=4;
-        saved.windowSec=windowSec;saved.minIncrease=minIncrease;saved.maxIncrease=maxIncrease;
-        try{localStorage.setItem(SCAN_SETTINGS_STORAGE_KEY,JSON.stringify(saved));}catch(_){}
-      }
-
-      if(windowSec>=1&&windowSec<=300)$('windowSec').value=String(windowSec);
-      if(minIncrease>0&&minIncrease<=100)$('minIncrease').value=String(minIncrease);
-      if(maxIncrease>0&&maxIncrease<=100)$('maxIncrease').value=String(maxIncrease);
-      if(typeof saved?.autoScan==='boolean')$('autoScan').checked=saved.autoScan;
-      return !!$('autoScan')?.checked;
-    }catch(e){
-      log(`Scan Settings load failed: ${e.message||e}`);
-      return false;
-    }
-  }
 
   function autoScanEnabled(){return !!$('autoScan')?.checked;}
   function clearAutoScanTimer(){
@@ -339,7 +275,7 @@
   function resetUI(){
     ['sumActive','sumRanked','sumUniverse','sum301','sumFast','sumEventWatch','sumSelect','sumCaution','sumWait','sumReject','sumV2Analyzed','sumV2Ready','sumV2Wait','sumV2Skip','ctxBtc','ctxMedian','ctxBreadth','ctxResult'].forEach(id=>{const el=$(id);if(el)el.textContent='—';});
     ['gateFast','gateLiquidity','gateOi','gateData','gateOperational','gateAnalyzed','gateEntryError','gate1hBlock','gate1hTransition','gateFreshElder','gate15m','gate5m','gateTrigger','gateRR','gateSoft','gateSelect'].forEach(id=>{const el=$(id);if(el)el.textContent='—';});
-    if(preservedFollowRows().length)renderCandidates([],state.settings?.windowSec||num($('windowSec').value)||60);
+    if(preservedFollowRows().length)renderCandidates([]);
     else $('candidateBody').innerHTML='<tr><td colspan="21" class="empty">Scan çalışıyor…</td></tr>';
     $('manualQueue').innerHTML='<span class="empty">Scan çalışıyor…</span>';
     $('contextStatus').textContent='Hesaplanıyor…';$('contextStatus').className='status info';
@@ -454,18 +390,6 @@
     }catch(e){state.eventWatch=new Map();updateFastEventWatchStatus();log(`Fast Event watch load failed: ${e.message||e}`);}
   }
 
-  function registerFastEvents(fastPass,referenceTime){
-    let added=0,refreshed=0;
-    pruneFastEventWatch(referenceTime);
-    for(const r of fastPass){
-      const eventTime=Number(r.fastEventTime)||referenceTime;
-      const existed=state.eventWatch.has(r.symbol);
-      state.eventWatch.set(r.symbol,{symbol:r.symbol,eventTime,eventPrice:r.snapshot2,fastChange:r.fastChange,windowSec:state.settings?.effectiveWindowSec||state.settings?.windowSec||NaN,minIncrease:state.settings?.effectiveEarlyMinIncrease||state.settings?.minIncrease,maxIncrease:state.settings?.maxIncrease,createdAt:Date.now()});
-      existed?refreshed++:added++;
-    }
-    if(added||refreshed)saveFastEventWatch();else updateFastEventWatchStatus();
-    return {added,refreshed};
-  }
 
   function priceFmt(x){
     if(!Number.isFinite(x))return '—';
@@ -1141,7 +1065,7 @@ function entryFreshnessReason(x){
 
 async function candidateDetails(row,refTime,serverTime,premiumMap,fundingInfoMap,thresholds,bookMap){
   const symbol=row.symbol;
-  // Bulk bookTicker and bulk premiumIndex are shared across all Fast Event candidates.
+  // Bulk bookTicker and bulk premiumIndex are shared across all scan candidates.
   // Only symbol-specific data that has no useful bulk equivalent is requested here.
   const liveBook=bookMap?.get(symbol)||null;
   const liveSpread=spreadPct(liveBook),mid=(num(liveBook?.bidPrice)+num(liveBook?.askPrice))/2;
@@ -1415,42 +1339,6 @@ function analyzeStep8(candles,ind,step7,eventStartTime,eventTime,eventPrice){
     return {ok:true,kind:'VALID',ageMs,reason:`3m setup timing valid: ${Math.round(ageMs/60000)}m old`};
   };
 
-  // Early setup path: detect a bullish 3m preparation state that already existed
-  // before the fast-price event. It is intentionally NOT a second breakout confirmation.
-  const momentumPrep=()=>{
-    const ev=Number(eventStartTime);
-    if(!Number.isFinite(ev))return {status:'WAIT',setup:'TIMING_WAIT',reason:'Fast Event start time unavailable for 3m early setup'};
-    let p=-1;
-    for(let i=t;i>=0;i--){if(Number(candles[i]?.closeTime)<=ev){p=i;break;}}
-    if(p<Math.max(3,EARLY_ENTRY_CONFIG.prepLookback3m))return {status:'WAIT',setup:'NONE',reason:'3m pre-event history insufficient for early setup'};
-    const atr=ind.atr14[p],e7=ind.ema7[p],e25=ind.ema25[p],hist=ind.macd.hist[p],histPrev=ind.macd.hist[p-1],rsi=ind.rsi14[p],rsiPrev=ind.rsi14[p-1];
-    if(![atr,e7,e25,hist,histPrev,rsi,rsiPrev].every(Number.isFinite)||!(atr>0))return {status:'WAIT',setup:'NONE',reason:'3m early-setup indicators unavailable'};
-
-    const e7Prev=ind.ema7[Math.max(0,p-EARLY_ENTRY_CONFIG.prepLookback3m)];
-    const emaGapAtr=(e7-e25)/atr;
-    const emaSlopeAtr=Number.isFinite(e7Prev)?(e7-e7Prev)/atr:NaN;
-    const close=candles[p].close;
-    const valueTop=Math.max(e7,e25);
-    const valueExtension=(close-valueTop)/atr;
-    const directional5m=step7.regime==='UPTREND'||(step7.regime==='TRANSITION'&&step7.ema25>=step7.ema99&&step7.slope!=='DOWN');
-    const checks={
-      ema:{pass:emaGapAtr>=EARLY_ENTRY_CONFIG.prepEmaGapMinAtr,emaGapAtr},
-      slope:{pass:Number.isFinite(emaSlopeAtr)&&emaSlopeAtr>0,emaSlopeAtr},
-      macd:{pass:hist>histPrev,hist,histPrev},
-      rsi:{pass:rsi>=EARLY_ENTRY_CONFIG.prepRsiFloor&&rsi>=rsiPrev,rsi,rsiPrev},
-      value:{pass:valueExtension<=EARLY_ENTRY_CONFIG.prepValueMaxAtr,valueExtension}
-    };
-    const support=['ema','slope','macd','rsi'].filter(k=>checks[k].pass).length;
-    const timing=timingFor(candles[p].closeTime);
-    if(!directional5m)return {status:'WAIT',setup:'NONE',reason:'5m direction is not bullish enough for 3m early setup',checks};
-    if(!timing.ok)return {status:'WAIT',setup:timing.kind==='STALE'?'STALE_SETUP':'TIMING_WAIT',reason:timing.reason,setupTime:candles[p].closeTime,setupAgeMs:timing.ageMs,maxSetupAgeMs,checks};
-    if(!checks.value.pass)return {status:'WAIT',setup:'EARLY_MOMENTUM_PREP',reason:`3m preparation already extended ${valueExtension.toFixed(2)} ATR before trigger`,setupTime:candles[p].closeTime,setupAgeMs:timing.ageMs,maxSetupAgeMs,checks};
-    if(support<3)return {status:'WAIT',setup:'EARLY_MOMENTUM_PREP',reason:`3m early preparation ${support}/4; need 3/4 EMA/slope/MACD/RSI`,setupTime:candles[p].closeTime,setupAgeMs:timing.ageMs,maxSetupAgeMs,checks};
-    const entryZoneLow=Math.min(e7,e25)-V2_CONFIG.valueAtr*atr;
-    const entryZoneHigh=valueTop+EARLY_ENTRY_CONFIG.prepValueMaxAtr*atr;
-    return {status:'PASS',setup:'EARLY_MOMENTUM_PREP',reason:`3m early preparation ${support}/4 already present before Fast Event; ${timing.reason}`,entryZoneLow,entryZoneHigh,atr3:ind.atr14[t],ema25:e25,setupTime:candles[p].closeTime,setupIndex:p,setupAgeMs:timing.ageMs,maxSetupAgeMs,checks};
-  };
-
   const pullbackSetup=()=>{
     let setupIndex=-1,setupZoneLow=NaN,setupZoneHigh=NaN,setupEma25=NaN,setupTiming=null,lastTimingReject=null;
     const scanStart=Math.max(1,t-V2_CONFIG.pullbackLookback+1);
@@ -1518,27 +1406,17 @@ function analyzeStep8(candles,ind,step7,eventStartTime,eventTime,eventPrice){
     return {status:'WAIT',setup:'NONE',reason:'no valid recent 3m breakout + volume + retest setup'};
   };
 
-  if(step7.regime==='UPTREND'){
-    const p=pullbackSetup();
-    if(p.status==='PASS')return p;
-    const m=momentumPrep();
-    if(m.status==='PASS')return m;
-    if(p.status==='INVALIDATED')return p;
-    const timingWait=[p,m].find(x=>x.setup==='STALE_SETUP'||x.setup==='TIMING_WAIT');
-    if(timingWait)return timingWait;
-    return m.setup==='EARLY_MOMENTUM_PREP'?m:p;
-  }
+  if(step7.regime==='UPTREND')return pullbackSetup();
   if(step7.regime==='RANGE')return breakoutSetup();
 
-  const p=pullbackSetup(),b=breakoutSetup(),m=momentumPrep(),passes=[p,b,m].filter(x=>x.status==='PASS');
+  const p=pullbackSetup(),b=breakoutSetup(),passes=[p,b].filter(x=>x.status==='PASS');
   if(passes.length){
     const chosen=passes.sort((a,b)=>Number(b.setupTime||0)-Number(a.setupTime||0))[0];
     return {...chosen,transition:true,reason:`5m TRANSITION; ${chosen.reason}`};
   }
-  if(p.status==='INVALIDATED'&&b.status==='INVALIDATED')return {status:'INVALIDATED',setup:'NONE',reason:`5m TRANSITION; both classic setup families invalidated (${p.setup}, ${b.setup})`};
-  const timingWait=[p,b,m].find(x=>x.setup==='STALE_SETUP'||x.setup==='TIMING_WAIT');
+  if(p.status==='INVALIDATED'&&b.status==='INVALIDATED')return {status:'INVALIDATED',setup:'NONE',reason:`5m TRANSITION; both setup families invalidated (${p.setup}, ${b.setup})`};
+  const timingWait=[p,b].find(x=>x.setup==='STALE_SETUP'||x.setup==='TIMING_WAIT');
   if(timingWait)return {...timingWait,transition:true,reason:`5m TRANSITION; ${timingWait.reason}`};
-  if(m.setup==='EARLY_MOMENTUM_PREP')return {...m,transition:true,reason:`5m TRANSITION; ${m.reason}`};
   return {status:'WAIT',setup:'NONE',transition:true,reason:'5m TRANSITION; no valid current 3m setup'};
 }
 
@@ -1559,87 +1437,28 @@ function step9ChecksAt(candles,ind,i){
 }
 
 
-function analyzeLive1mEarlyTrigger(candles,ind,currentCandle,currentPrice,serverTime){
-  const t=candles.length-1;
-  if(!currentCandle||t<3)return null;
-  const atr=ind.atr14[t],px=Number.isFinite(currentPrice)&&currentPrice>0?currentPrice:currentCandle.close;
-  if(!(atr>0&&px>0&&currentCandle.open>0))return null;
-
-  const lookback=Math.max(2,EARLY_ENTRY_CONFIG.breakoutLookback1m);
-  const recent=candles.slice(Math.max(0,candles.length-lookback));
-  if(!recent.length)return null;
-  const recentHigh=Math.max(...recent.map(c=>c.high));
-  const breakout=px>recentHigh+EARLY_ENTRY_CONFIG.breakoutBufferAtr1*atr;
-  const bodyAtr=(px-currentCandle.open)/atr;
-  const bodyMomentum=bodyAtr>=EARLY_ENTRY_CONFIG.liveBodyMinAtr1&&px>candles[t].close;
-
-  const liveCloses=[...ind.closes,px];
-  const liveEma7=emaSeries(liveCloses,7).at(-1),prevEma7=ind.ema7[t];
-  const emaOk=Number.isFinite(liveEma7)&&Number.isFinite(prevEma7)&&liveEma7>prevEma7&&px>=liveEma7;
-
-  const liveMacd=macdSeries(liveCloses),mi=liveCloses.length-1;
-  const liveHist=liveMacd.hist[mi],liveDif=liveMacd.dif[mi],liveDea=liveMacd.dea[mi],prevHist=ind.macd.hist[t];
-  const macdOk=Number.isFinite(liveHist)&&Number.isFinite(prevHist)&&Number.isFinite(liveDif)&&Number.isFinite(liveDea)&&(liveHist>prevHist||liveDif>liveDea);
-
-  const volRef=candles.slice(-V2_CONFIG.volumeSma).map(c=>c.volume).filter(Number.isFinite);
-  const volAvg=mean(volRef);
-  const elapsed=Number.isFinite(serverTime)&&Number.isFinite(currentCandle.openTime)
-    ?clamp((serverTime-currentCandle.openTime)/60000,0.10,1):1;
-  const projectedVolume=Number.isFinite(currentCandle.volume)?currentCandle.volume/elapsed:NaN;
-  const volumeRatio=volAvg>0&&Number.isFinite(projectedVolume)?projectedVolume/volAvg:NaN;
-  const volumeOk=Number.isFinite(volumeRatio)&&volumeRatio>=EARLY_ENTRY_CONFIG.projectedVolumeMinRatio;
-
-  const supportScore=[emaOk,macdOk,volumeOk].filter(Boolean).length;
-  const triggerLead=breakout||bodyMomentum;
-  const confirmed=triggerLead&&supportScore>=EARLY_ENTRY_CONFIG.liveSupportScoreMin;
-  return {
-    confirmed,triggerMode:'LIVE_EARLY',supportScore,
-    score:`${supportScore}/3`,
-    checks:{
-      breakout:{pass:breakout,recentHigh,bufferAtr:EARLY_ENTRY_CONFIG.breakoutBufferAtr1},
-      body:{pass:bodyMomentum,bodyAtr},
-      ema:{pass:emaOk,liveEma7,prevEma7},
-      macd:{pass:macdOk,dif:liveDif,dea:liveDea,hist:liveHist,histPrev:prevHist},
-      volume:{pass:volumeOk,projectedVolume,volumeRatio,reference:volAvg}
-    },
-    bodyAtr,recentHigh,projectedVolume,volumeRatio
-  };
-}
-
-function analyzeStep9(candles,ind,step8,currentCandle,currentPrice,serverTime){
+function analyzeStep9(candles,ind,step8){
   if(step8.status!=='PASS')return {status:'NOT_RUN',score:'0/3',passed:0,mandatoryPassed:false,timingPending:false,reason:'Step 8 is not PASS',checks:{}};
   const t=candles.length-1;
-  if(t<1)return {status:'WAIT',score:'—',passed:NaN,mandatoryPassed:false,timingPending:false,reason:'1m history unavailable',checks:{}};
-
-  // Primary path: current UN-CLOSED 1m candle. This is the actual early-entry trigger.
-  // A closed-candle confirmation is no longer allowed to turn a non-triggering live
-  // candle into SELECT; that was the source of the late second-candle entries.
-  const live=analyzeLive1mEarlyTrigger(candles,ind,currentCandle,currentPrice,serverTime);
-  if(live){
-    const setupTime=Number(step8.setupTime);
-    if(Number.isFinite(setupTime)&&Number(currentCandle.openTime)+60000<setupTime){
-      return {status:'WAIT',score:live.score,passed:live.supportScore,mandatoryPassed:true,timingPending:true,triggerMode:'LIVE_EARLY',reason:'live 1m candle predates the active 3m setup',checks:live.checks,firstConfirmationIndex:-1,firstConfirmationTime:NaN};
-    }
-    if(live.confirmed){
-      const lead=live.checks.breakout.pass?'micro-breakout':'strong live body';
-      return {status:'CONFIRMED',score:live.score,passed:live.supportScore,mandatoryPassed:true,supportPassed:true,timingPending:false,triggerMode:'LIVE_EARLY',reason:`LIVE 1m early trigger: ${lead} + ${live.supportScore}/3 EMA/MACD/projected-VOL support`,checks:live.checks,firstConfirmationIndex:t+1,firstConfirmationTime:Number(serverTime)||Number(currentCandle.closeTime)};
-    }
-    return {status:'WAIT',score:live.score,passed:live.supportScore,mandatoryPassed:true,supportPassed:false,timingPending:false,triggerMode:'LIVE_EARLY',reason:`LIVE 1m waiting: need micro-breakout/strong body + ${EARLY_ENTRY_CONFIG.liveSupportScoreMin}/3 EMA/MACD/projected-VOL support`,checks:live.checks,firstConfirmationIndex:-1,firstConfirmationTime:NaN};
-  }
-
-  // Fallback only when Binance did not provide a current 1m candle.
-  // This keeps the module robust without reintroducing the normal late-entry path.
+  // Use the latest fully closed 1m candle without waiting for a post-Fast-Event close,
+  // but it must belong to the setup lifecycle: confirmation close >= 3m setup close.
+  if(t<1)return {status:'WAIT',score:'—',passed:NaN,mandatoryPassed:false,timingPending:false,reason:'completed 1m candle unavailable',checks:{}};
   const setupTime=Number(step8.setupTime),confirmationTime=Number(candles[t]?.closeTime);
   if(Number.isFinite(setupTime)&&Number.isFinite(confirmationTime)&&confirmationTime<setupTime){
-    return {status:'WAIT',score:'—',passed:NaN,mandatoryPassed:false,timingPending:true,triggerMode:'CLOSED_FALLBACK',reason:'latest completed 1m candle predates the 3m setup',checks:{},firstConfirmationIndex:-1,firstConfirmationTime:NaN};
+    return {status:'WAIT',score:'—',passed:NaN,mandatoryPassed:false,timingPending:true,reason:'latest completed 1m candle predates the 3m setup',checks:{},firstConfirmationIndex:-1,firstConfirmationTime:NaN};
   }
   const checks=step9ChecksAt(candles,ind,t);
   const qualityKeys=['rsi','macd','atr'];
   const passed=qualityKeys.filter(k=>checks[k]?.pass).length;
-  const confirmed=passed>=2;
-  return confirmed
-    ?{status:'CONFIRMED',score:`${passed}/3`,passed,mandatoryPassed:true,supportPassed:true,timingPending:false,triggerMode:'CLOSED_FALLBACK',reason:`1m current candle unavailable; fallback closed candle ${passed}/3`,checks,firstConfirmationIndex:t,firstConfirmationTime:candles[t].closeTime}
-    :{status:'WAIT',score:`${passed}/3`,passed,mandatoryPassed:true,supportPassed:false,timingPending:false,triggerMode:'CLOSED_FALLBACK',reason:'1m current candle unavailable and fallback confirmation is weak',checks,firstConfirmationIndex:-1,firstConfirmationTime:NaN};
+  const failed=qualityKeys.filter(k=>!checks[k]?.pass).map(k=>k.toUpperCase());
+  // Same confirmation rule as StartScan: any 1 of RSI / MACD / ATR is sufficient.
+  const confirmed=passed>=1;
+  const status=confirmed?'CONFIRMED':'WAIT';
+  const volumeNote=checks.volume?.pass?'closed-1m VOL supportive':'closed-1m VOL weak (info only)';
+  const reason=confirmed
+    ?`current completed 1m ${passed}/3 confirmed; at least 1 of RSI/MACD/ATR PASS; ${volumeNote}`
+    :`current completed 1m 0/3; RSI/MACD/ATR all failed; CAUTION; ${volumeNote}`;
+  return {status,score:`${passed}/3`,passed,mandatoryPassed:true,supportPassed:confirmed,timingPending:false,reason,checks,firstConfirmationIndex:confirmed?t:-1,firstConfirmationTime:confirmed?candles[t].closeTime:NaN};
 }
 
 
@@ -1651,19 +1470,9 @@ function analyzeStep10(candles1,ind1,candles3,ind3,step8,step9,currentPrice,entr
     if(current3Close<invalidLine)return {status:'INVALIDATED',reason:'3m pullback invalidated below EMA25 - 0.50 ATR3'};
   }else if(step8.setup==='BREAKOUT_RETEST'){
     if(current3Close<step8.entryZoneLow)return {status:'INVALIDATED',reason:'3m breakout/retest invalidated below retest zone'};
-  }else if(step8.setup==='EARLY_MOMENTUM_PREP'){
-    if(Number.isFinite(step8.entryZoneLow)&&current3Close<step8.entryZoneLow)return {status:'INVALIDATED',reason:'3m early-momentum preparation invalidated below entry zone'};
   }
-  if(step9.status!=='CONFIRMED')return {status:'WAIT',reason:'LIVE 1m early trigger is not active'};
+  if(step9.status!=='CONFIRMED')return {status:'WAIT',reason:'current completed 1m confirmation is not valid (at least 1 of RSI/MACD/ATR must PASS)'};
   const px=Number.isFinite(currentPrice)&&currentPrice>0?currentPrice:candles1[t1].close;
-
-  // Anti-late-entry guard: if price already travelled too far over roughly two
-  // 1m bars, do not chase even when indicators are still bullish.
-  const atr1=ind1.atr14[t1],burstBase=t1>=1?candles1[t1-1]?.close:NaN;
-  const burst2mAtr=Number.isFinite(atr1)&&atr1>0&&Number.isFinite(burstBase)?(px-burstBase)/atr1:NaN;
-  if(Number.isFinite(burst2mAtr)&&burst2mAtr>EARLY_ENTRY_CONFIG.maxBurst2mAtr1){
-    return {status:'TOO_LATE',reason:`entry too late: recent ~2m burst ${burst2mAtr.toFixed(2)} ATR1 > ${EARLY_ENTRY_CONFIG.maxBurst2mAtr1.toFixed(2)} ATR1`,currentPrice:px,burst2mAtr};
-  }
   const lower=step8.entryZoneLow;
   if(px<lower)return {status:'WAIT',reason:'Fast Event price is below 3m entry-zone lower boundary',currentPrice:px};
 
@@ -1676,7 +1485,7 @@ function analyzeStep10(candles1,ind1,candles3,ind3,step8,step9,currentPrice,entr
 
   const extensionAtr=Number.isFinite(atr3)&&atr3>0&&Number.isFinite(step8.entryZoneHigh)
     ?(px-step8.entryZoneHigh)/atr3:NaN;
-  return {status:'READY',reason:`5m direction + pre-existing 3m setup + LIVE 1m early trigger ${step9.score} + 5m no-chase ${valueExtension.toFixed(2)} ATR${Number.isFinite(burst2mAtr)?` + burst ${burst2mAtr.toFixed(2)} ATR1`:''}`,currentPrice:px,extensionAtr,valueExtension,burst2mAtr};
+  return {status:'READY',reason:`5m trend + fresh 3m setup + latest-closed 1m ${step9.score} + Fast Event trigger + 5m no-chase ${valueExtension.toFixed(2)} ATR`,currentPrice:px,extensionAtr,valueExtension};
 }
 
 function v2NotRun(reason='entry analysis not run'){
@@ -1727,11 +1536,9 @@ function finalizeEntryDecision(row,chart,finalSpread=NaN){
       // Any non-confirmed 1m state stays visible as CAUTION; only explicit hard-fail
       // conditions elsewhere are allowed to remove the candidate from the Response.
       if(chart.step9?.timingPending){
-        coreCautions.push(chart.step9?.reason||'1m trigger timing not ready');
-      }else if(chart.step9?.triggerMode==='LIVE_EARLY'){
-        coreCautions.push(chart.step9?.reason||'LIVE 1m early trigger not ready');
+        coreCautions.push(chart.step9?.reason||'1m candle not ready');
       }else if(Number.isFinite(passed)){
-        coreCautions.push(`${chart.step9.score} fallback confirmation not Entry Ready`);
+        coreCautions.push(`${chart.step9.score} not Entry Ready — no RSI/MACD/ATR confirmation component passed`);
       }else{
         coreCautions.push(chart.step9?.reason||'1m confirmation not ready');
       }
@@ -1800,12 +1607,12 @@ async function analyzeChartCandidate(row,serverTime,finalBookMap){
     const liveDirection3m=analyzeLiveCandleDirection(s3.current,c3,currentPrice,i3.atr14.at(-1),'3m');
     const liveDirection1m=analyzeLiveCandleDirection(s1.current,c1,currentPrice,i1.atr14.at(-1),'1m');
 
-    // Early-entry hierarchy: 5m direction -> pre-existing 3m setup -> LIVE 1m trigger.
+    // New hierarchy: 5m primary structure -> 3m setup -> 1m confirmation.
     const step7=analyzeStep7(c5,i5);
     const entryFreshness=await analyzeEntryFreshnessFromData(row.symbol,currentPrice,serverTime,c5,i5);
     const entryImpulse=entryFreshness?.impulse||analyze5mElderImpulse({candles:c5,ind:i5,hl:null});
     const step8=analyzeStep8(c3,i3,step7,row.fastEventStartTime,row.fastEventTime,row.fastEventPrice);
-    const step9=analyzeStep9(c1,i1,step8,s1.current,currentPrice,serverTime);
+    const step9=analyzeStep9(c1,i1,step8);
     const step10=analyzeStep10(c1,i1,c3,i3,step8,step9,currentPrice,entryFreshness);
     const priceLocation=step10.status==='READY'?computePriceLocation(c5,c3,c1,i5,i3,step7,step8,{horizonMin:240,currentPriceOverride:currentPrice,currentTimeOverride:serverTime}):null;
     const provisional={step7,step8,step9,step10,priceLocation,entryFreshness,entryImpulse,liveDirection5m,liveDirection3m,liveDirection1m};
@@ -1946,7 +1753,7 @@ function gridRowsForDisplay(rows){
   return [...selects,...cautions];
 }
 
-function resultPill(result){
+function resultPill(result,row=null){
   const r=String(result||'CAUTION').toUpperCase();
   const cls=r==='SELECT'?'select':r==='CAUTION'?'caution':r.toLowerCase();
   return `<span class="pill ${htmlEscape(cls)}">${htmlEscape(r)}</span>`;
@@ -1983,14 +1790,7 @@ function entryDecisionTitle(r){
   return details.join(' | ')||entryDecisionSummary(r);
 }
 
-function renderCandidates(rows,windowSec){
-    const body=$('candidateBody'),displayRows=mergeRowsWithFollow(rows);
-    if(!displayRows.length){
-      body.innerHTML='<tr><td colspan="21" class="empty">Aktif Fast Event adayı yok.</td></tr>';
-      notifyCandidatesRendered();
-      return;
-    }
-    body.innerHTML=displayRows.map((r,i)=>{
+function candidateRowHtml(r,i){
       const g=r.gridMeta||{};
       const age=metaFormatAge(g.listingTime),ageDate=metaFormatDate(g.listingTime);
       const pl=r.decisionSupport?.priceLevel,rl=r.decisionSupport?.riskLevel;
@@ -2001,7 +1801,7 @@ function renderCandidates(rows,windowSec){
         <td>${i+1}</td>
         <td class="symbol"><button class="symbolBtn" data-action="decision-support" data-symbol="${htmlEscape(r.symbol)}" type="button" title="PriceLevel ve RiskLevel hesaplamak için tıkla">${htmlEscape(r.symbol)}</button></td>
         <td data-role="ys">${metaYsHtml(g.ys)}</td>
-        <td>${resultPill(r.result)}</td>
+        <td>${resultPill(r.result,r)}</td>
         <td class="decisionCell ${plLabel==='—'||plLabel==='N/A'?'na':''}" data-role="price-level" title="${htmlEscape(plTitle)}">${htmlEscape(plLabel)}</td>
         <td class="decisionCell ${rlLabel==='—'||rlLabel==='N/A'?'na':''}" data-role="risk-level" title="${htmlEscape(rlTitle)}">${htmlEscape(rlLabel)}</td>
         <td><input class="monitorInput entryPriceInput" data-role="entry" type="number" min="0" step="any" placeholder="Entry Price" inputmode="decimal"></td>
@@ -2020,8 +1820,55 @@ function renderCandidates(rows,windowSec){
         <td class="num" data-role="meta-min">${htmlEscape(metaFormatPrice(g.allTimeLow))}</td>
         <td data-role="meta-hour">${htmlEscape(g.requestTime||'—')}</td>
       </tr>`;
-    }).join('');
+}
+
+function renderCandidates(rows){
+    const body=$('candidateBody'),displayRows=mergeRowsWithFollow(rows);
+    if(!displayRows.length){
+      body.innerHTML='<tr><td colspan="21" class="empty">Bu scan için aday yok.</td></tr>';
+      notifyCandidatesRendered();
+      return;
+    }
+    body.innerHTML=displayRows.map((r,i)=>candidateRowHtml(r,i)).join('');
     notifyCandidatesRendered();
+  }
+
+  function upsertLiveSelect(row,liveCount=0,total=0){
+    if(!row||row.result!=='SELECT'||!row.symbol)return false;
+
+    const followed=new Set(preservedFollowRows().map(r=>r.symbol));
+    if(followed.has(row.symbol))return false;
+
+    const body=$('candidateBody');
+    if(!body)return false;
+
+    const existing=scanRow(row.symbol);
+    if(existing){
+      // Do not overwrite a persistent Follow row or other non-scan owner rows.
+      if(existing.querySelector('[data-action="follow"]')===null)return false;
+      const holder=document.createElement('tbody');
+      holder.innerHTML=candidateRowHtml(row,0).trim();
+      const nextRow=holder.firstElementChild;
+      if(!nextRow)return false;
+      existing.replaceWith(nextRow);
+      notifyCandidatesRendered();
+      setStatus(`5m-3m-1m tarama devam ediyor • canlı SELECT ${liveCount}${total?` • analiz ${liveCount}/${total}`:''}`,'good');
+      return false;
+    }
+
+    body.querySelectorAll('tr').forEach(tr=>{
+      if(!tr.dataset.symbol&&tr.querySelector('td.empty'))tr.remove();
+    });
+
+    const holder=document.createElement('tbody');
+    holder.innerHTML=candidateRowHtml(row,[...body.querySelectorAll('tr[data-symbol]')].length).trim();
+    const nextRow=holder.firstElementChild;
+    if(!nextRow)return false;
+    body.appendChild(nextRow);
+
+    notifyCandidatesRendered();
+    setStatus(`5m-3m-1m tarama devam ediyor • canlı SELECT ${liveCount}${total?` • analiz ${liveCount}/${total}`:''}`,'good');
+    return true;
   }
 
 
@@ -2077,31 +1924,22 @@ function logEntryDecisionDiagnostics(rows){
 
   async function startScan(){
     if(state.running)return;
-    const windowSec=num($('windowSec').value),minIncrease=num($('minIncrease').value),maxIncrease=num($('maxIncrease').value),riskBands=['all'],momentumEnabled=false;
-    if(!(windowSec>=1&&windowSec<=300)){setStatus('X seconds 1–300 arasında olmalı.','bad');return;}
-    // This variant is an EARLY-entry scanner. Waiting a full 60s before even
-    // looking at the move defeats that goal, so the bulk snapshot window is
-    // capped at 15s. The user's threshold is rate-normalized to this shorter window.
-    const effectiveWindowSec=Math.min(windowSec,EARLY_ENTRY_CONFIG.snapshotMaxSec);
-    const rateScale=effectiveWindowSec/windowSec;
-    const effectiveStrongMinIncrease=Math.max(EARLY_ENTRY_CONFIG.rateMinFloorPct,minIncrease*rateScale);
-    const effectiveEarlyMinIncrease=Math.max(EARLY_ENTRY_CONFIG.rateMinFloorPct,effectiveStrongMinIncrease*EARLY_ENTRY_CONFIG.earlyMinFactor);
-    if(!(minIncrease>0&&minIncrease<=100)){setStatus('Minimum increase 0–100% arasında pozitif olmalı.','bad');return;}
-    if(!(maxIncrease>0&&maxIncrease<=100)){setStatus('Maximum increase 0–100% arasında pozitif olmalı.','bad');return;}
-    if(maxIncrease<minIncrease){setStatus('Maximum Increase, Minimum Increase değerinden küçük olamaz.','bad');return;}
+    const riskBands=['all'],momentumEnabled=false;
     if(!riskBands.length){setStatus('En az bir Risk Profile Activity Rank checkbox seçilmelidir.','bad');return;}
 
     clearAutoScanTimer();
     captureFollowRowsBeforeScan();
     document.dispatchEvent(new CustomEvent('cryptooffer:scan-start',{detail:{source:SCAN_SOURCE,reason:SCAN_SOURCE,preserveFollow:true}}));
     window.CryptoOfferData.activeScanSource=SCAN_SOURCE;
-    state.running=true;state.controller=new AbortController();state.startedAt=Date.now();state.settings={windowSec,effectiveWindowSec,minIncrease,effectiveStrongMinIncrease,effectiveEarlyMinIncrease,maxIncrease,riskBands,momentumAnalysis:momentumEnabled,entryMode:'EARLY_5m3m1m'};resetUI();setButtons(true);
+    state.running=true;state.controller=new AbortController();state.startedAt=Date.now();
+    state.settings={riskBands,momentumAnalysis:momentumEnabled,scanSettingsUsed:false};
+    resetUI();setButtons(true);
     try{
       if(!window.CoinUniverse||typeof window.CoinUniverse.getAllowedCoins!=='function'){
         throw new Error('CoinUniverse.js yüklenmedi. index.html içinde StartScan.js dosyasından önce js/CoinUniverse.js yüklenmelidir.');
       }
       const allowedCoins=await window.CoinUniverse.getAllowedCoins();
-      log(`AllowedCoins loaded: ${allowedCoins.size} symbol. Rank/Fast Event/base percentile algoritması tam korunacak; filtre yalnız Entry Ready ağır analizinden önce uygulanacak.`);
+      log(`AllowedCoins loaded: ${allowedCoins.size} symbol. Activity Rank/base percentile/Entry Ready algoritması korunuyor; AllowedCoins filtresi mevcut aşamasında kalıyor.`);
 
       let activity;
       const cacheAge=activityCacheAgeMs();
@@ -2143,73 +1981,49 @@ function logEntryDecisionDiagnostics(rows){
       log(`Risk Profile bands ${riskBandsLabel(riskBands)}: universe=${universe.length}; Rank 300+ available=${rank300Count}`);
       if(!universe.length)throw new Error('Seçili Risk Profile checkbox kombinasyonu için universe boş.');
 
-      progress(42,'Snapshot #1');
-      const snap1=await getBulkPrices();
-      const snap1RefTime=Math.max(0,...snap1.map(x=>Number(x.time)||0))||Date.now();
-      const snap1Map=new Map(snap1.map(x=>[x.symbol,{price:num(x.price),time:Number(x.time)||snap1RefTime}]));
-      const snapshot1Wall=performance.now();
-      setStatus(`Snapshot #1 alındı. Early-entry için ${effectiveWindowSec} saniye bekleniyor…`,'info');
-      const snapshotDeadline=performance.now()+effectiveWindowSec*1000;
-      while(true){
-        if(state.controller.signal.aborted)throw new DOMException('Aborted','AbortError');
-        const remaining=snapshotDeadline-performance.now();
-        if(remaining<=0) break;
-        const elapsed=effectiveWindowSec*1000-remaining;
-        progress(42+8*clamp(elapsed/(effectiveWindowSec*1000),0,1),`Snapshot #2 in ${(remaining/1000).toFixed(1)}s`);
-        await sleep(Math.min(250,remaining));
-      }
-      progress(50,'Snapshot #2');
-      const snap2=await getBulkPrices();const snap2Map=new Map(snap2.map(x=>[x.symbol,{price:num(x.price),time:Number(x.time)||Date.now()}]));state.snapshotElapsedMs=performance.now()-snapshot1Wall;
-      const refTime=Math.max(0,...snap2.map(x=>Number(x.time)||0))||Date.now();
+      // Scan Settings (Sec / MinY% / MaxY%) are intentionally NOT used by this scanner.
+      // Every coin in the existing Activity Rank universe proceeds to the SAME downstream
+      // base filters and 5m -> 3m -> 1m Entry Ready algorithm.
+      //
+      // A single current-price snapshot is kept only as the decision-price / timing anchor
+      // required by the unchanged downstream code. There is no X-second wait and no
+      // percentage-move prefilter.
+      progress(46,'Current price anchor');
+      const currentSnap=await getBulkPrices();
+      const refTime=Math.max(0,...currentSnap.map(x=>Number(x.time)||0))||Date.now();
+      const currentMap=new Map(currentSnap.map(x=>[x.symbol,{price:num(x.price),time:Number(x.time)||refTime}]));
+      state.snapshotElapsedMs=0;
 
-      const profileRows=universe.map(r=>{
-        const a=snap1Map.get(r.symbol),b=snap2Map.get(r.symbol);const fast=a?.price>0&&b?.price>0?(b.price/a.price-1)*100:NaN;
-        return {...r,snapshot1:a?.price,snapshot2:b?.price,currentFastChange:fast,fastChange:fast,fastEventStartTime:Number(a?.time)||snap1RefTime,fastEventTime:Number(b?.time)||refTime,fastEventPrice:b?.price};
-      });
-      const allStrongFastPass=profileRows
-        .filter(r=>Number.isFinite(r.currentFastChange)&&r.currentFastChange>=effectiveStrongMinIncrease&&r.currentFastChange<=maxIncrease)
-        .sort((a,b)=>(b.currentFastChange-a.currentFastChange)||((a.activityRank||Infinity)-(b.activityRank||Infinity)));
-      const strongFastPass=allStrongFastPass.slice(0,EARLY_ENTRY_CONFIG.maxStrongCandidates);
-      const strongSymbols=new Set(strongFastPass.map(r=>r.symbol));
-      const earlyExtras=profileRows
-        .filter(r=>!strongSymbols.has(r.symbol)&&Number.isFinite(r.currentFastChange)&&r.currentFastChange>=effectiveEarlyMinIncrease&&r.currentFastChange<effectiveStrongMinIncrease&&r.currentFastChange<=maxIncrease)
-        .sort((a,b)=>(b.currentFastChange-a.currentFastChange)||((a.activityRank||Infinity)-(b.activityRank||Infinity)))
-        .slice(0,EARLY_ENTRY_CONFIG.maxEarlyExtras)
-        .map(r=>({...r,earlyEvent:true}));
-      const fastPass=[...strongFastPass.map(r=>({...r,earlyEvent:false})),...earlyExtras];
-      $('sumFast').textContent=String(fastPass.length);
-      log(`Fast Event EARLY detector: ${strongFastPass.length}/${allStrongFastPass.length} strong kept + ${earlyExtras.length} early-extra / ${profileRows.length}; effective window ${effectiveWindowSec}s (requested ${windowSec}s), strong ≥ ${effectiveStrongMinIncrease.toFixed(3)}%, early ≥ ${effectiveEarlyMinIncrease.toFixed(3)}%, max ${maxIncrease}% (snapshot gap ${state.snapshotElapsedMs.toFixed(0)} ms). Candidate cap=${EARLY_ENTRY_CONFIG.maxStrongCandidates}+${EARLY_ENTRY_CONFIG.maxEarlyExtras} to protect API usage.`);
-
-      const registration=registerFastEvents(fastPass,refTime);
-
-      // IMPORTANT: Start Scan must make its decision from THIS scan's two snapshots only.
-      // The persistent Fast Event Watch is retained for history/telemetry, but it must never
-      // inject older events back into the current candidate set. Otherwise the same symbols
-      // can keep reappearing for up to 4 hours even when they no longer pass the selected
-      // X-second / min-max increase filter.
-      const analysisCandidates=fastPass.map(r=>{
-        const eventStartTime=Number(r.fastEventStartTime)||snap1RefTime;
-        const eventTime=Number(r.fastEventTime)||refTime;
+      const analysisCandidates=universe.map(r=>{
+        const p=currentMap.get(r.symbol);
+        const currentPrice=p?.price;
+        const anchorTime=Number(p?.time)||refTime;
         return {
           ...r,
-          fastChange:Number(r.currentFastChange),
-          fastEventStartTime:eventStartTime,
-          fastEventTime:eventTime,
-          fastEventPrice:Number(r.snapshot2),
-          fastEventWindowSec:effectiveWindowSec,
-          eventAgeMs:Math.max(0,refTime-eventTime)
+          snapshot1:currentPrice,
+          snapshot2:currentPrice,
+          currentFastChange:0,
+          fastChange:0,
+          fastEventStartTime:anchorTime,
+          fastEventTime:anchorTime,
+          fastEventPrice:currentPrice,
+          fastEventWindowSec:0,
+          eventAgeMs:0
         };
-      });
+      }).filter(r=>Number.isFinite(r.snapshot2)&&r.snapshot2>0);
+
+      $('sumFast').textContent=String(analysisCandidates.length);
       $('sumEventWatch').textContent=String(analysisCandidates.length);
       state.gateDiagnostics=state.gateDiagnostics||emptyGateDiagnostics();
-      state.gateDiagnostics.fastEvents=analysisCandidates.length;renderGateDiagnostics();
-      log(`Current scan candidates: ${analysisCandidates.length}; Fast Event watch updated (${registration.added} new, ${registration.refreshed} refreshed) but historical watch entries are excluded from Start Scan selection.`);
+      state.gateDiagnostics.fastEvents=analysisCandidates.length;
+      renderGateDiagnostics();
+      log(`Scan Settings OFF: ${analysisCandidates.length}/${universe.length} universe coin current-price anchor ile doğrudan mevcut base + 5m/3m/1m algoritmasına gönderildi.`);
 
       if(!analysisCandidates.length){
-        clearMarketContext('Aktif early Fast Event yok; General Crypto Context bu scan için hesaplanmadı.');
-        log('General Crypto Context skipped: no candidates passed the current scan window; panel cleared and no context kline requests sent.');
-        state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,0);progress(100,'Completed — no active events');
-        setStatus(`Scan tamamlandı. Bu taramada filtreyi geçen aday yok.`,'warn');return;
+        clearMarketContext('Analiz edilebilir güncel fiyat adayı yok; General Crypto Context bu scan için hesaplanmadı.');
+        log('General Crypto Context skipped: current-price anchor produced no valid candidates.');
+        state.results=[];renderCandidates([]);renderQueue([]);updateSummary([],universe.length,0,0);progress(100,'Completed — no valid price candidates');
+        setStatus('Scan tamamlandı. Analiz edilebilir güncel fiyat adayı yok.','warn');return;
       }
 
       // Base filters are only the first stage. Final SELECT is assigned only after
@@ -2242,9 +2056,9 @@ function logEntryDecisionDiagnostics(rows){
   Object.assign(state.gateDiagnostics,summarizeBaseDropDiagnostics(Math.max(0,analysisCandidates.length-rows.length)));renderGateDiagnostics();
 
   if(!rows.length){
-    state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,analysisCandidates.length);
+    state.results=[];renderCandidates([]);renderQueue([]);updateSummary([],universe.length,analysisCandidates.length,analysisCandidates.length);
     progress(100,'Completed — no qualified candidates');
-    setStatus('Scan tamamlandı. Fast Event adaylarından hiçbiri temel filtreleri geçemedi.','warn');
+    setStatus('Scan tamamlandı. Adaylardan hiçbiri mevcut temel filtreleri geçemedi.','warn');
     return;
   }
 
@@ -2261,7 +2075,7 @@ function logEntryDecisionDiagnostics(rows){
   state.gateDiagnostics.operationalDrop=Math.max(0,beforeOperationalCount-rows.length);renderGateDiagnostics();
 
   if(!rows.length){
-    state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,analysisCandidates.length);
+    state.results=[];renderCandidates([]);renderQueue([]);updateSummary([],universe.length,analysisCandidates.length,analysisCandidates.length);
     progress(100,'Completed — operational filters removed all candidates');
     setStatus('Scan tamamlandı. Operasyonel kontrolden geçen aday yok.','warn');
     return;
@@ -2281,7 +2095,7 @@ function logEntryDecisionDiagnostics(rows){
   }
 
   if(!rows.length){
-    state.results=[];renderCandidates([],windowSec);renderQueue([]);updateSummary([],universe.length,fastPass.length,analysisCandidates.length);
+    state.results=[];renderCandidates([]);renderQueue([]);updateSummary([],universe.length,analysisCandidates.length,analysisCandidates.length);
     progress(100,'Completed — AllowedCoins removed remaining candidates');
     setStatus(`Scan tamamlandı. Temel filtreleri geçen ${rowsBeforeCoinUniverse} adayın tamamı AllowedCoins dışında kaldı.`,'warn');
     return;
@@ -2292,13 +2106,24 @@ function logEntryDecisionDiagnostics(rows){
   progress(85,'Price learning completion');
   await completePriceLearning(refTime);
 
-  progress(88,'Entry Ready: 5m direction + 3m setup + LIVE 1m trigger');
+  progress(88,'Entry Ready: 5m + 3m + 1m + location');
   const finalBooks=await getBulkBook();
   const finalBookMap=new Map((Array.isArray(finalBooks)?finalBooks:[]).map(x=>[x.symbol,x]));
   const finalBookTime=Math.max(0,...(Array.isArray(finalBooks)?finalBooks:[]).map(x=>Number(x.time)||0));
   const entryServerTime=finalBookTime||finalServerTime;
-  const analyzedRows=await mapLimit(rows,2,async r=>analyzeChartCandidate(r,entryServerTime,finalBookMap),{
-    pauseMs:0,onProgress:(d,n)=>progress(88+9*d/n,`Early Entry ${d}/${n}`)
+  let liveAnalyzed=0;
+  let liveSelectCount=0;
+  const analyzedRows=await mapLimit(rows,2,async r=>{
+    const analyzed=await analyzeChartCandidate(r,entryServerTime,finalBookMap);
+    liveAnalyzed++;
+    if(analyzed?.result==='SELECT'){
+      analyzed.scanSource=SCAN_SOURCE;
+      analyzed.scanTimeframes={...SCAN_TIMEFRAMES};
+      if(upsertLiveSelect(analyzed,liveSelectCount+1,rows.length))liveSelectCount++;
+    }
+    return analyzed;
+  },{
+    pauseMs:0,onProgress:(d,n)=>progress(88+9*d/n,`Entry Ready ${d}/${n} • live SELECT ${liveSelectCount}`)
   });
   logEntryDecisionDiagnostics(analyzedRows);
   finalizeGateDiagnostics(analyzedRows);
@@ -2314,19 +2139,19 @@ function logEntryDecisionDiagnostics(rows){
     row.scanTimeframes={...SCAN_TIMEFRAMES};
   }
   state.results=rows;
-  renderCandidates(rows,windowSec);
+  renderCandidates(rows);
   renderQueue(rows);
   updateCandidateMomentumUI(rows);
   updateV5MetadataUI(rows);
-  updateSummary(rows,universe.length,fastPass.length,analysisCandidates.length);
+  updateSummary(rows,universe.length,analysisCandidates.length,analysisCandidates.length);
   updateLearningStatus();
 
   progress(100,'Completed');
   const sec=((Date.now()-state.startedAt)/1000).toFixed(1);
   const selectCount=rows.filter(r=>r.result==='SELECT').length,cautionCount=rows.filter(r=>r.result==='CAUTION').length;
   const cls=selectCount?'good':cautionCount?'warn':'info';
-  setStatus(`Scan tamamlandı: SELECT ${selectCount} • CAUTION ${cautionCount} • ${state.requestCount} API request • ${sec}s. SELECT = Early Entry Ready.` ,cls);
-  log(`Final Result: SELECT ${selectCount} | CAUTION ${cautionCount} | hidden hard-fail ${Math.max(0,analyzedRows.filter(Boolean).length-rows.length)}. requests=${state.requestCount}, errors=${state.errors.length}, duration=${sec}s`);
+  setStatus(`Scan tamamlandı: SELECT ${selectCount} • CAUTION ${cautionCount} • ${state.requestCount} API request • ${sec}s. Live SELECT streaming aktif • Scan Settings OFF • SELECT = Entry Ready.` ,cls);
+  log(`Final Result: SELECT ${selectCount} | CAUTION ${cautionCount} | live-streamed SELECT ${liveSelectCount} | Scan Settings OFF | hidden hard-fail ${Math.max(0,analyzedRows.filter(Boolean).length-rows.length)}. requests=${state.requestCount}, errors=${state.errors.length}, duration=${sec}s`);
 }catch(e){
       if(e.name==='AbortError'){setStatus('Scan kullanıcı tarafından iptal edildi.','warn');progress(0,'Cancelled');log('Cancelled.');}
       else{setStatus(`Scan failed: ${e.message}`,'bad');progress(0,'Failed');log(`FATAL: ${e.stack||e.message}`);}
@@ -2365,7 +2190,6 @@ function logEntryDecisionDiagnostics(rows){
       setStatus(`${SCAN_SOURCE} başlatılamadı: başka bir StartScan ailesi taraması çalışıyor.`,'warn');
       return;
     }
-    saveScanSettings();
     const normalAuto=normalAutoController();
     try{normalAuto?.cancel?.();}catch(_){}
     try{await startScan();}
@@ -2397,6 +2221,6 @@ function logEntryDecisionDiagnostics(rows){
   window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};
   window.CryptoFlowScanner.modules.startScan531={
     config:V2_CONFIG,timeframes:SCAN_TIMEFRAMES,start:runStandaloneScan,scan:runStandaloneScan,cancel:cancelStandaloneScan,
-    priceConfig:PRICE_CONFIG,state,scanSettings:{storageKey:SCAN_SETTINGS_STORAGE_KEY,save:saveScanSettings,load:loadScanSettings}
+    priceConfig:PRICE_CONFIG,state
   };
 })();

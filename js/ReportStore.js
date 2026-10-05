@@ -196,7 +196,6 @@
           follow_date TEXT NOT NULL,
           follow_time TEXT NOT NULL,
           coin TEXT NOT NULL,
-          scan_source TEXT NOT NULL DEFAULT '',
           entry_price REAL NOT NULL,
           stop_price REAL NOT NULL,
           profit_pct REAL,
@@ -206,7 +205,8 @@
           closed_at TEXT NOT NULL,
           follow_start_time TEXT,
           follow_end_time TEXT,
-          follow_duration_sec INTEGER
+          follow_duration_sec INTEGER,
+          diagnostic_log TEXT NOT NULL DEFAULT ''
         );
       `);
 
@@ -217,10 +217,10 @@
         const nameIndex = followInfo[0].columns.indexOf('name');
         for (const row of followInfo[0].values) followColumns.add(String(row[nameIndex]));
       }
-      if (!followColumns.has('scan_source')) db.run("ALTER TABLE follow_report ADD COLUMN scan_source TEXT NOT NULL DEFAULT '';");
       if (!followColumns.has('follow_start_time')) db.run('ALTER TABLE follow_report ADD COLUMN follow_start_time TEXT;');
       if (!followColumns.has('follow_end_time')) db.run('ALTER TABLE follow_report ADD COLUMN follow_end_time TEXT;');
       if (!followColumns.has('follow_duration_sec')) db.run('ALTER TABLE follow_report ADD COLUMN follow_duration_sec INTEGER;');
+      if (!followColumns.has('diagnostic_log')) db.run("ALTER TABLE follow_report ADD COLUMN diagnostic_log TEXT NOT NULL DEFAULT '';" );
 
       db.run('CREATE INDEX IF NOT EXISTS idx_follow_report_date_time ON follow_report(follow_date, follow_time);');
       db.run('CREATE INDEX IF NOT EXISTS idx_follow_report_coin ON follow_report(coin);');
@@ -353,14 +353,14 @@
       const profitPct = calcProfitPct(entryPrice, safeExitPrice);
       const closeType = String(detail?.closeType || 'EXIT').toUpperCase();
       const reason = String(detail?.reason || (closeType === 'MANUAL' ? 'Manual Follow Stop' : 'EXIT'));
-      const scanSource = String(detail?.scanSource || 'Unknown');
+      const diagnosticLog = String(detail?.diagnosticLog || '');
       const followStartTime = localTimeFromMs(startedAt);
       const followEndTime = localTimeFromMs(closedAt);
       const followDurationSec = Math.max(0, Math.round((closedAt - startedAt) / 1000));
 
       const stmt = database.prepare(`
         INSERT OR IGNORE INTO follow_report
-          (follow_key, follow_date, follow_time, coin, scan_source, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec)
+          (follow_key, follow_date, follow_time, coin, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec, diagnostic_log)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       stmt.run([
@@ -368,7 +368,6 @@
         localDateFromMs(startedAt),
         localTimeFromMs(startedAt),
         symbol,
-        scanSource,
         entryPrice,
         stopPrice,
         profitPct,
@@ -378,7 +377,8 @@
         localIsoFromMs(closedAt) || localIsoNow(),
         followStartTime,
         followEndTime,
-        followDurationSec
+        followDurationSec,
+        diagnosticLog
       ]);
       stmt.free();
 
@@ -393,7 +393,7 @@
   function queryAllFollowRows() {
     if (!db) return [];
     const stmt = db.prepare(`
-      SELECT id, follow_date, follow_time, coin, scan_source, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec
+      SELECT id, follow_date, follow_time, coin, entry_price, stop_price, profit_pct, reason, exit_price, close_type, closed_at, follow_start_time, follow_end_time, follow_duration_sec, diagnostic_log
       FROM follow_report
     `);
     const rows = [];
@@ -514,7 +514,7 @@
 
     if (!els.followReportBody) return;
     if (!rows.length) {
-      els.followReportBody.innerHTML = '<tr><td colspan="11" class="reportEmpty">No records.</td></tr>';
+      els.followReportBody.innerHTML = '<tr><td colspan="10" class="reportEmpty">No records.</td></tr>';
       updateSortMarks('#followReportTable', followSortState);
       return;
     }
@@ -524,14 +524,16 @@
         <td>${esc(r.follow_date || '—')}</td>
         <td>${esc(r.follow_time || '—')}</td>
         <td class="symbol">${esc(r.coin || '—')}</td>
-        <td>${esc(r.scan_source || 'Unknown')}</td>
         <td class="num">${esc(formatPrice(r.entry_price))}</td>
         <td class="num">${esc(formatPrice(r.stop_price))}</td>
         <td class="num ${Number(r.profit_pct) >= 0 ? 'good' : 'bad'}">${esc(formatProfit(r.profit_pct))}</td>
         <td>${esc(r.follow_start_time || '—')}</td>
         <td>${esc(r.follow_end_time || '—')}</td>
         <td class="num">${esc(formatDuration(r.follow_duration_sec))}</td>
-        <td class="followReportReason">${esc(r.reason || '—')}</td>
+        <td class="followReportReason">
+          <div>${esc(r.reason || '—')}</div>
+          ${r.diagnostic_log ? `<details class="followDiagnostic"><summary>Diagnostic Log</summary><pre>${esc(r.diagnostic_log)}</pre></details>` : ''}
+        </td>
       </tr>
     `).join('');
     updateSortMarks('#followReportTable', followSortState);

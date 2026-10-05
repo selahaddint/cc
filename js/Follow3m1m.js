@@ -2,7 +2,7 @@
   'use strict';
 
   // ================================================================
-  // FOLLOW MODULE
+  // FOLLOW 3m/1m MODULE
   // Owns only: Entry/Stop interaction, Follow start/stop, live monitor,
   // HOLD/PROTECT/EXIT rules and live OI/flow analysis.
   // It calls no Start Scan or Risk Management function.
@@ -80,10 +80,7 @@
   }
 
   const FOLLOW_AUTO531_SOURCE='Auto 5m-3m-1m Scan';
-  function followBtcImpactApi(taskOrSource){
-    const source=typeof taskOrSource==='string'?taskOrSource:String(taskOrSource?.scanSource||'');
-    return source===FOLLOW_AUTO531_SOURCE?window.BTCImpact5m3m1m:window.BTCImpact;
-  }
+  function followBtcImpactApi(){return window.BTCImpact3m1m||null;}
   function followBtcImpactSummary(task){
     if(!task?.btcImpact)return '';
     const api=followBtcImpactApi(task);
@@ -353,16 +350,10 @@
   function followDiagNumber(value,digits=4){
     const n=Number(value);return Number.isFinite(n)?Number(n.toFixed(digits)):null;
   }
-
   function followDiagWatchSnapshot(symbol,tr=null){
     try{
-      const auto=window.Auto5m3m1mScan?.state?.watchStates?.get?.(symbol);
-      if(auto)return {status:String(auto.status||''),label:'AUTO531',reason:String(auto.reason||''),metrics:{confirmCount:Number(auto.confirmCount)||0,confirmed:!!auto.confirmed,btcImpact:auto.btcImpact||null}};
-    }catch(_){}
-    try{
-      const state=window.Watch?.getState?.();
-      const s=state?.signals?.[symbol];
-      if(s)return {status:String(s.status||''),label:String(s.label||''),reason:String(s.reason||''),metrics:s.metrics||null};
+      const auto=null;
+      if(auto)return {status:String(auto.status||''),label:'AUTO31',reason:String(auto.reason||''),metrics:{confirmCount:Number(auto.confirmCount)||0,confirmed:!!auto.confirmed,btcImpact:auto.btcImpact||null}};
     }catch(_){}
     const cell=(tr||followRow(symbol))?.querySelector?.('td[data-role="watch-status"]');
     const badge=cell?.querySelector?.('.watchSignal');
@@ -383,7 +374,7 @@
     const bs=Number.isFinite(x.buySharePct)?`${x.bsSide||'MIXED'} ${x.buySharePct.toFixed(1)}%`:(x.bsSide||'—');
     const btc=x.btc||'—';
     const flags=(x.flags||[]).join('; ')||'—';
-    return `${x.phase} ${t} | +${x.elapsedMin}m | P=${followPriceFmt(x.price)} PnL=${pnl} RunHi=${hi} RunLo=${lo} DD=${dd} | 5m=${s5} 3m=${s3} | OIΔ=${oi} B/S=${bs} | BTC=${btc} | ${x.status} | ${flags}`;
+    return `${x.phase} ${t} | +${x.elapsedMin}m | P=${followPriceFmt(x.price)} PnL=${pnl} RunHi=${hi} RunLo=${lo} DD=${dd} | 3m=${s5} 1m=${s3} | OIΔ=${oi} B/S=${bs} | BTC=${btc} | ${x.status} | ${flags}`;
   }
 
   function followDiagnosticText(task){
@@ -507,7 +498,8 @@
       window.CryptoOfferData?.longEntryConfirmState,
       window.CryptoOfferData?.rangeSqueezeLongState,
       window.CryptoOfferData?.auto3m1mScanState,
-      window.CryptoOfferData?.auto531State
+      window.CryptoOfferData?.auto531State,
+      window.CryptoOfferData?.auto153State
     ].filter(Boolean).sort((a,b)=>(Number(b?.startedAt)||0)-(Number(a?.startedAt)||0));
 
     let fromLatestScan=null;
@@ -613,7 +605,7 @@
     const task=followMonitors.get(symbol);if(!task||task.refreshing||task.status==='RED')return;
     task.refreshing=true;
     try{
-      const [serverTime,priceRaw,oiRaw,oneMinRaw,premiumRaw]=await Promise.all([
+      const [serverTime,priceRaw,oiRaw,fastRaw,premiumRaw]=await Promise.all([
         followGetServerTime(),
         followFetchJson(`${FOLLOW_BASE}/fapi/v1/ticker/price?symbol=${encodeURIComponent(symbol)}`,{retries:2,timeout:12000}),
         followFetchJson(`${FOLLOW_BASE}/fapi/v1/openInterest?symbol=${encodeURIComponent(symbol)}`,{retries:2,timeout:12000}),
@@ -624,206 +616,158 @@
       if(!(currentPrice>0))throw new Error('current price unavailable');
       const priceCell=followRow(symbol)?.querySelector('[data-role="current-price"]');
       if(priceCell)priceCell.textContent=followMetaFormatPrice(currentPrice);
-      const recent1m=Array.isArray(oneMinRaw)?oneMinRaw.map(followKlineToCandle).filter(c=>[c.high,c.low].every(Number.isFinite)):[];
-      const closedLive1m=parseLive1m(oneMinRaw,serverTime);
-      const live5m=await refreshLive5mContext(task,serverTime);
+
+      const recentFast=Array.isArray(fastRaw)?fastRaw.map(followKlineToCandle).filter(c=>[c.high,c.low,c.close].every(Number.isFinite)):[];
+      const closedFast=parseLive1m(fastRaw,serverTime);
+      const liveFlow=false?await refreshLive5mContext(task,serverTime):{lsa:{value:NaN,arrow:'—'},lsp:{value:NaN,arrow:'—'},gls:{value:NaN,arrow:'—'},taker5:{value:NaN,arrow:'—'},oiHist:[],oiCizgi:{enabled:false,ready:false,exit:false}};
       const isFirstFollowCheck=!Number.isFinite(Number(task.lastCheck));
       const since=Math.max(0,Number(task.lastCheck)||task.startedAt);
-      const active1m=isFirstFollowCheck?[]:recent1m.filter(c=>c.closeTime>=since);
-      // On the first check, a 1m candle can contain high/low values from before Follow was clicked.
-      // Use only the current price so pre-Follow movement cannot cause an artificial instant EXIT.
-      const observedHigh=isFirstFollowCheck?currentPrice:Math.max(currentPrice,...active1m.map(c=>c.high));
-      const observedLow=isFirstFollowCheck?currentPrice:Math.min(currentPrice,...active1m.map(c=>c.low));
-      task.tf1={candles:recent1m,observedHigh,observedLow};
+      const activeFast=isFirstFollowCheck?[]:recentFast.filter(c=>c.closeTime>=since);
+      const observedHigh=isFirstFollowCheck?currentPrice:Math.max(currentPrice,...activeFast.map(c=>c.high));
+      const observedLow=isFirstFollowCheck?currentPrice:Math.min(currentPrice,...activeFast.map(c=>c.low));
+      task.tfExec={candles:recentFast,observedHigh,observedLow,timeframe:'1m'};
       task.highest=Math.max(task.highest||task.entryPrice,observedHigh);
 
-      if(monitorNeedsRefresh(task,'tf15',serverTime,15*60*1000)){
-        const initializeSwingTracking=!task.tf15;
-        const candles=await followGetClosedKlines(symbol,'15m',serverTime),ind=followBuildIndicators(candles);
-        task.tf15={bucket:Math.floor((serverTime-1)/(15*60*1000)),candles,ind};
+      if(monitorNeedsRefresh(task,'tfPrimary',serverTime,3*60*1000)){
+        const initializeSwingTracking=!task.tfPrimary;
+        const candles=await followGetClosedKlines(symbol,'3m',serverTime),ind=followBuildIndicators(candles);
+        task.tfPrimary={bucket:Math.floor((serverTime-1)/3*60*1000),candles,ind,structure:structureState(candles,ind),timeframe:'3m'};
         const pts=latestSwingPoints(candles),hl=lastConfirmedHLPoint(candles,ind,task.entryPrice),hh=lastConfirmedHHPoint(candles);
-        // Initial HL is allowed only when it is a genuinely confirmed structural HL,
-        // below Entry, and the latest closed 15m candle is still above it.
         if(!task.hlInitialized){
           task.hlInitialized=true;
-          if(hl&&hl.price<task.entryPrice&&candles.at(-1)?.close>=hl.price){
-            task.lastHL=hl.price;task.lastHLTime=hl.time;
-          }
+          if(hl&&hl.price<task.entryPrice&&candles.at(-1)?.close>=hl.price){task.lastHL=hl.price;task.lastHLTime=hl.time;}
         }
         if(initializeSwingTracking)task.lastSeenLowTime=pts.low?.time??task.lastSeenLowTime;
-        if(!Number.isFinite(task.lastHH)&&hh){
-          task.lastHH=hh.price;task.lastHHTime=hh.time;task.lastHHRSI=ind.rsi14[hh.index];task.lastHHMACD=ind.macd.hist[hh.index];
-        }
+        if(!Number.isFinite(task.lastHH)&&hh){task.lastHH=hh.price;task.lastHHTime=hh.time;task.lastHHRSI=ind.rsi14[hh.index];task.lastHHMACD=ind.macd.hist[hh.index];}
         if(initializeSwingTracking)task.lastSeenHighTime=pts.high?.time??task.lastSeenHighTime;
       }
-      if(monitorNeedsRefresh(task,'tf5',serverTime,5*60*1000)){
-        const candles=await followGetClosedKlines(symbol,'5m',serverTime),ind=followBuildIndicators(candles);
-        task.tf5={bucket:Math.floor((serverTime-1)/(5*60*1000)),candles,ind,structure:structureState(candles,ind)};
+
+      if(monitorNeedsRefresh(task,'tfSecondary',serverTime,1*60*1000)){
+        const candles=true
+          ?closedFast.slice(-FOLLOW_V2_CONFIG.candleLimit)
+          :await followGetClosedKlines(symbol,'1m',serverTime);
+        if(candles.length>=30){
+          const ind=followBuildIndicators(candles);
+          task.tfSecondary={bucket:Math.floor((serverTime-1)/1*60*1000),candles,ind,structure:structureState(candles,ind),timeframe:'1m'};
+        }
       }
-      const fiveBearish=!!task.tf5?.structure?.bearish;
-      if(fiveBearish&&monitorNeedsRefresh(task,'tf3',serverTime,3*60*1000)){
-        const candles=await followGetClosedKlines(symbol,'3m',serverTime),ind=followBuildIndicators(candles);
-        task.tf3={bucket:Math.floor((serverTime-1)/(3*60*1000)),candles,ind,structure:structureState(candles,ind)};
+      const secondaryBearish=!!task.tfSecondary?.structure?.bearish;
+
+      if(false&&(secondaryBearish||!task.tfConfirm)&&monitorNeedsRefresh(task,'tfConfirm',serverTime,1*60*1000)){
+        const candles=true
+          ?closedFast.slice(-FOLLOW_V2_CONFIG.candleLimit)
+          :await followGetClosedKlines(symbol,'1m',serverTime);
+        if(candles.length>=30){
+          const ind=followBuildIndicators(candles);
+          task.tfConfirm={bucket:Math.floor((serverTime-1)/1*60*1000),candles,ind,structure:structureState(candles,ind),timeframe:'1m'};
+        }
       }
+
+      task.tf5=task.tfPrimary;task.tf3=task.tfSecondary;task.tf1=task.tfSecondary||task.tfExec;
 
       const red=[],yellow=[],confirm=[],info=[];
-      const c15=task.tf15?.candles,i15=task.tf15?.ind;
-      if(!c15||!i15)throw new Error('15m monitor data unavailable');
-      const t15=c15.length-1,last15=c15[t15],atr15=i15.atr14[t15];
+      const cp=task.tfPrimary?.candles,ip=task.tfPrimary?.ind;
+      if(!cp||!ip)throw new Error('3m monitor data unavailable');
+      const tp=cp.length-1,lastP=cp[tp],atrP=ip.atr14[tp];
 
-      // 1) Hard stop / maximum accepted loss.
       if(task.stopPrice>0&&observedLow<=task.stopPrice)red.push(`Stop Price hit/touched: 1m low ${followPriceFmt(observedLow)} ≤ ${followPriceFmt(task.stopPrice)}`);
 
-      // 2–4) 15m structure + ATR break + wick/close discipline.
-      if(Number.isFinite(task.lastHL)&&atr15>0){
-        if(last15.close<task.lastHL){
-          const breakRatio=(task.lastHL-last15.close)/atr15;task.lastBreakRatio=breakRatio;
-          if(breakRatio>=FOLLOW_CONFIG.atrBreakExit)red.push(`15m HL breakdown: ${followFmt(breakRatio,2)} ATR (HL ${followPriceFmt(task.lastHL)}, Close ${followPriceFmt(last15.close)})`);
-          else if(breakRatio>=FOLLOW_CONFIG.atrBreakWarn)yellow.push(`15m HL break warning: ${followFmt(breakRatio,2)} ATR`);
-          else info.push(`15m close ${followFmt(breakRatio,2)} ATR below HL; below warning threshold`);
-        }else if(last15.low<task.lastHL){
-          info.push('15m wick below HL; close recovered above HL');
-        }
+      if(Number.isFinite(task.lastHL)&&atrP>0){
+        if(lastP.close<task.lastHL){
+          const breakRatio=(task.lastHL-lastP.close)/atrP;task.lastBreakRatio=breakRatio;
+          if(breakRatio>=FOLLOW_CONFIG.atrBreakExit)red.push(`3m HL breakdown: ${followFmt(breakRatio,2)} ATR (HL ${followPriceFmt(task.lastHL)}, Close ${followPriceFmt(lastP.close)})`);
+          else if(breakRatio>=FOLLOW_CONFIG.atrBreakWarn)yellow.push(`3m HL break warning: ${followFmt(breakRatio,2)} ATR`);
+          else info.push(`3m close ${followFmt(breakRatio,2)} ATR below HL; below warning threshold`);
+        }else if(lastP.low<task.lastHL)info.push('3m wick below HL; close recovered above HL');
       }
 
-      // Update structural references only after evaluating the currently active HL.
-      // A new swing-low is first a CANDIDATE. It must clear ATR noise and then be
-      // confirmed by a later swing-high breaking the prior swing-high before it can
-      // replace lastHL. This prevents tiny local dips from becoming EXIT levels.
-      const pts15=latestSwingPoints(c15);
-      if(pts15.low&&pts15.low.time>Number(task.lastSeenLowTime||0)){
-        task.lastSeenLowTime=pts15.low.time;
-        const lowAtr=i15.atr14[pts15.low.index],lowTol=Number.isFinite(lowAtr)?FOLLOW_V2_CONFIG.structureAtr*lowAtr:0;
-        const isHigherLow=!!pts15.prevLow&&pts15.low.price>pts15.prevLow.price+lowTol;
+      const ptsP=latestSwingPoints(cp);
+      if(ptsP.low&&ptsP.low.time>Number(task.lastSeenLowTime||0)){
+        task.lastSeenLowTime=ptsP.low.time;
+        const lowAtr=ip.atr14[ptsP.low.index],lowTol=Number.isFinite(lowAtr)?FOLLOW_V2_CONFIG.structureAtr*lowAtr:0;
+        const isHigherLow=!!ptsP.prevLow&&ptsP.low.price>ptsP.prevLow.price+lowTol;
         if(isHigherLow){
-          const priorHigh=pts15.all.highs.filter(h=>h.index<pts15.low.index).at(-1)||null;
-          task.pendingHL=priorHigh?{
-            price:pts15.low.price,time:pts15.low.time,index:pts15.low.index,
-            previousLow:pts15.prevLow.price,confirmAbove:priorHigh.price,confirmHighIndex:priorHigh.index
-          }:null;
-        }else{
-          task.pendingHL=null;
-        }
+          const priorHigh=ptsP.all.highs.filter(h=>h.index<ptsP.low.index).at(-1)||null;
+          task.pendingHL=priorHigh?{price:ptsP.low.price,time:ptsP.low.time,index:ptsP.low.index,previousLow:ptsP.prevLow.price,confirmAbove:priorHigh.price,confirmHighIndex:priorHigh.index}:null;
+        }else task.pendingHL=null;
       }
-
       if(task.pendingHL){
         const p=task.pendingHL;
-        const confirmingHigh=pts15.all.highs.find(h=>{
+        const confirmingHigh=ptsP.all.highs.find(h=>{
           if(h.index<=p.index)return false;
-          const highAtr=i15.atr14[h.index],highTol=Number.isFinite(highAtr)?FOLLOW_V2_CONFIG.structureAtr*highAtr:0;
+          const highAtr=ip.atr14[h.index],highTol=Number.isFinite(highAtr)?FOLLOW_V2_CONFIG.structureAtr*highAtr:0;
           return h.price>p.confirmAbove+highTol;
         });
         if(confirmingHigh){
-          const candidateAtr=i15.atr14[p.index],candidateTol=Number.isFinite(candidateAtr)?FOLLOW_V2_CONFIG.structureAtr*candidateAtr:0;
-          // Structural protection can ratchet upward, never downward.
-          if(!Number.isFinite(task.lastHL)||p.price>task.lastHL+candidateTol){
-            task.lastHL=p.price;task.lastHLTime=p.time;
-          }
+          const candidateAtr=ip.atr14[p.index],candidateTol=Number.isFinite(candidateAtr)?FOLLOW_V2_CONFIG.structureAtr*candidateAtr:0;
+          if(!Number.isFinite(task.lastHL)||p.price>task.lastHL+candidateTol){task.lastHL=p.price;task.lastHLTime=p.time;}
           task.pendingHL=null;
         }
       }
 
-      // 5–6) 5m warning + 3m confirmation.
-      if(fiveBearish){
-        yellow.push('5m structure turned LL/LH');
-        if(task.tf3?.structure?.bearish)yellow.push('3m confirms LL/LH');
+      if(secondaryBearish){
+        yellow.push('1m structure turned LL/LH');
+        if(false&&task.tfConfirm?.structure?.bearish)yellow.push('1m confirms LL/LH');
       }
 
-      // 7) 1m is execution-only; it never changes the color.
-
-      // 8–9) 15m EMA slope + Elder-style impulse confirmation.
-      const emaNow=i15.ema25[t15],emaPrev=i15.ema25[t15-FOLLOW_V2_CONFIG.emaSlopeBars];
-      const slopeThreshold=Number.isFinite(atr15)?FOLLOW_V2_CONFIG.emaSlopeAtr*atr15:0;
+      const emaNow=ip.ema25[tp],emaPrev=ip.ema25[tp-FOLLOW_V2_CONFIG.emaSlopeBars];
+      const slopeThreshold=Number.isFinite(atrP)?FOLLOW_V2_CONFIG.emaSlopeAtr*atrP:0;
       const emaDown=Number.isFinite(emaNow)&&Number.isFinite(emaPrev)&&(emaNow-emaPrev)<-slopeThreshold;
-      const macdNow=i15.macd.hist[t15],macdPrev=i15.macd.hist[t15-1];
+      const macdNow=ip.macd.hist[tp],macdPrev=ip.macd.hist[tp-1];
       const macdDown=Number.isFinite(macdNow)&&Number.isFinite(macdPrev)&&macdNow<macdPrev;
-      if(emaDown)yellow.push('15m EMA25 slope DOWN');
-      if(emaDown&&macdDown)yellow.push('15m bearish Impulse: EMA↓ + MACD-H↓');
+      if(emaDown)yellow.push('3m EMA25 slope DOWN');
+      if(emaDown&&macdDown)yellow.push('3m bearish Impulse: EMA↓ + MACD-H↓');
 
-      // 10–11) New confirmed swing-high: failed HH or bearish divergence.
-      if(pts15.high&&pts15.high.time>Number(task.lastSeenHighTime||0)){
-        const newHigh=pts15.high,oldHH=task.lastHH,oldRSI=task.lastHHRSI,oldMACD=task.lastHHMACD;
-        const newRSI=i15.rsi14[newHigh.index],newMACD=i15.macd.hist[newHigh.index];
+      if(ptsP.high&&ptsP.high.time>Number(task.lastSeenHighTime||0)){
+        const newHigh=ptsP.high,oldHH=task.lastHH,oldRSI=task.lastHHRSI,oldMACD=task.lastHHMACD;
+        const newRSI=ip.rsi14[newHigh.index],newMACD=ip.macd.hist[newHigh.index];
         task.lastSeenHighTime=newHigh.time;
         if(Number.isFinite(oldHH)){
-          if(newHigh.price<=oldHH)yellow.push(`15m failed HH: ${followPriceFmt(newHigh.price)} ≤ ${followPriceFmt(oldHH)}`);
+          if(newHigh.price<=oldHH)yellow.push(`3m failed HH: ${followPriceFmt(newHigh.price)} ≤ ${followPriceFmt(oldHH)}`);
           else{
             const rsiDiv=Number.isFinite(newRSI)&&Number.isFinite(oldRSI)&&newRSI<oldRSI;
             const macdDiv=Number.isFinite(newMACD)&&Number.isFinite(oldMACD)&&newMACD<oldMACD;
-            if(rsiDiv||macdDiv)yellow.push(`15m bearish divergence${rsiDiv&&macdDiv?' (RSI + MACD-H)':rsiDiv?' (RSI)':' (MACD-H)'}`);
+            if(rsiDiv||macdDiv)yellow.push(`3m bearish divergence${rsiDiv&&macdDiv?' (RSI + MACD-H)':rsiDiv?' (RSI)':' (MACD-H)'}`);
             task.lastHH=newHigh.price;task.lastHHTime=newHigh.time;task.lastHHRSI=newRSI;task.lastHHMACD=newMACD;
           }
-        }else{
-          task.lastHH=newHigh.price;task.lastHHTime=newHigh.time;task.lastHHRSI=newRSI;task.lastHHMACD=newMACD;
-        }
+        }else{task.lastHH=newHigh.price;task.lastHHTime=newHigh.time;task.lastHHRSI=newRSI;task.lastHHMACD=newMACD;}
       }
 
-      // 12) Volume is confirmation only.
-      if(sellingVolumeExpansion(task.tf5?.candles)||sellingVolumeExpansion(c15))confirm.push('selling volume expanding');
-
-      // 13) OI is confirmation only; direction is not inferred from OI alone.
+      if(sellingVolumeExpansion(task.tfSecondary?.candles)||sellingVolumeExpansion(cp))confirm.push('selling volume expanding');
       if(Number.isFinite(task.prevPrice)&&Number.isFinite(task.prevOi)&&Number.isFinite(currentOi)&&currentPrice<task.prevPrice&&currentOi>task.prevOi)confirm.push('price ↓ + OI ↑');
 
-      // 14–15) Highest price + ATR trailing + break-even protection.
-      if(atr15>0){
-        const trailingLevel=task.highest-FOLLOW_CONFIG.trailingAtrMultiple*atr15;task.trailingLevel=trailingLevel;
-
-        // Break-even arms once the trade has reached at least +1 ATR from Entry.
-        // Once armed it stays armed for the lifetime of this Follow session.
-        if(!task.breakEvenArmed&&task.highest>=task.entryPrice+FOLLOW_CONFIG.breakEvenArmAtr*atr15){
-          task.breakEvenArmed=true;task.breakEvenArmedAt=serverTime;
-        }
-
+      if(atrP>0){
+        const trailingLevel=task.highest-FOLLOW_CONFIG.trailingAtrMultiple*atrP;task.trailingLevel=trailingLevel;
+        if(!task.breakEvenArmed&&task.highest>=task.entryPrice+FOLLOW_CONFIG.breakEvenArmAtr*atrP){task.breakEvenArmed=true;task.breakEvenArmedAt=serverTime;}
         const effectiveExitLevel=task.breakEvenArmed?Math.max(task.entryPrice,trailingLevel):trailingLevel;
         task.effectiveExitLevel=effectiveExitLevel;
-
         if(task.breakEvenArmed)info.push(`Break-even armed: exit floor ${followPriceFmt(effectiveExitLevel)}`);
-
         if(currentPrice<=effectiveExitLevel){
-          if(task.breakEvenArmed&&task.entryPrice>=trailingLevel){
-            red.push(`Break-even protection hit: Current ${followPriceFmt(currentPrice)} ≤ Entry ${followPriceFmt(task.entryPrice)} after +${followFmt(FOLLOW_CONFIG.breakEvenArmAtr,2)} ATR profit`);
-          }else{
-            red.push(`ATR trailing hit: Current ${followPriceFmt(currentPrice)} ≤ ${followPriceFmt(effectiveExitLevel)} (Highest ${followPriceFmt(task.highest)})`);
-          }
+          if(task.breakEvenArmed&&task.entryPrice>=trailingLevel)red.push(`Break-even protection hit: Current ${followPriceFmt(currentPrice)} ≤ Entry ${followPriceFmt(task.entryPrice)} after +${followFmt(FOLLOW_CONFIG.breakEvenArmAtr,2)} ATR profit`);
+          else red.push(`ATR trailing hit: Current ${followPriceFmt(currentPrice)} ≤ ${followPriceFmt(effectiveExitLevel)} (Highest ${followPriceFmt(task.highest)})`);
         }
       }
 
-      // 16) Maximum holding period, measured from Follow start.
       if(serverTime-task.startedAt>=FOLLOW_CONFIG.maxHoldMs)red.push(`Maximum ${Math.round(FOLLOW_CONFIG.maxHoldMs/60000)}m Follow holding time reached`);
 
-      // V11 Follow-only live analysis. It may add PROTECT, but never EXIT on its own.
-      // The isolated experimental OICizgiAnalysis below is the sole exception requested by the user.
-      const live=buildLiveFollowAnalysis(task,{serverTime,currentPrice,currentOi,premiumRaw,closed1m:closedLive1m,live5m});
+      const live=buildLiveFollowAnalysis(task,{serverTime,currentPrice,currentOi,premiumRaw,closed1m:closedFast,live5m:liveFlow});
       task.liveAnalysis=live;setLiveUI(symbol,live.change,live.result);
       if(live.decision==='PROTECT')yellow.push(`Live Analysis: ${live.label}`);
       if(FOLLOW_LIVE_CONFIG.oiCizgiEnabled&&live.oiCizgi?.exit)red.push(`OICizgiAnalysis EXIT: OI USDT line DOWN + latest OI ${followCompact(live.oiCizgi.latestOi)} < previous peak ${followCompact(live.oiCizgi.previousPeakOi)}`);
 
-      // BTC impact is a risk layer only; it never creates EXIT by itself.
-      // Auto 5m-3m-1m uses its dedicated 5m/3m/1m impact module. Other scan
-      // families keep their existing impact path until their own modules exist.
-      const btcApi=followBtcImpactApi(task);
+      const btcApi=window.BTCImpact3m1m;
       if(btcApi?.analyze){
         try{
           const btc=await btcApi.analyze(symbol);
           task.btcImpact=btc;task.btcImpactError=null;
           const btcText=btcApi.summaryText?.(btc)||`BTC ${btc.level}`;
-          if(task.scanSource===FOLLOW_AUTO531_SOURCE){
-            if(btc.followDecision==='PROTECT')yellow.push(`BTC 5m/3m/1m PROTECT • ${btcText}`);
-            else if(btc.level==='POSITIVE')info.push(`BTC 5m/3m/1m supportive • ${btcText}`);
-            else if((btc.level==='NEGATIVE'||btc.level==='STRONG_NEGATIVE')&&Number.isFinite(Number(btc.relativeStrengthPct))&&Number(btc.relativeStrengthPct)>0)info.push(`BTC negative but coin relatively strong • ${btcText}`);
-          }else{
-            if(btc.level==='STRONG_NEGATIVE')yellow.push(`BTC Impact: STRONG NEGATIVE • ${btcText}`);
-            else if(btc.level==='NEGATIVE')yellow.push(`BTC Impact: NEGATIVE • ${btcText}`);
-            else if(btc.level==='POSITIVE')info.push(`BTC Impact supportive • ${btcText}`);
-          }
-        }catch(e){
-          task.btcImpactError=String(e?.message||e);
-          followLog(`BTC Impact ${symbol}: ${e?.message||e}`);
-        }
+          if(btc.followDecision==='PROTECT')yellow.push(`BTC 3m/1m PROTECT • ${btcText}`);
+          else if(btc.level==='POSITIVE')info.push(`BTC 3m/1m supportive • ${btcText}`);
+          else if((btc.level==='NEGATIVE'||btc.level==='STRONG_NEGATIVE')&&Number.isFinite(Number(btc.relativeStrengthPct))&&Number(btc.relativeStrengthPct)>0)info.push(`BTC negative but coin relatively strong • ${btcText}`);
+        }catch(e){task.btcImpactError=String(e?.message||e);followLog(`BTC Impact ${symbol}: ${e?.message||e}`);}
       }
 
       task.prevPrice=currentPrice;task.prevOi=currentOi;task.currentPrice=currentPrice;task.currentOi=currentOi;task.lastCheck=serverTime;
-
       let status='GREEN',reason='HOLD — no PROTECT / EXIT condition';
       if(red.length){status='RED';reason=red.join(' | ');if(yellow.length)reason+=` | Warnings: ${yellow.join('; ')}`;if(confirm.length)reason+=` | Confirm: ${confirm.join('; ')}`;}
       else if(yellow.length){status='YELLOW';reason=yellow.join(' | ');if(confirm.length)reason+=` | Confirm: ${confirm.join('; ')}`;}
@@ -834,20 +778,13 @@
       setMonitorUI(symbol,status,reason,serverTime);
       const diagPhase=isFirstFollowCheck?'ENTRY':status==='RED'?'EXIT':status!==previousStatus?'STATUS':'SNAPSHOT';
       followRecordDiagnostic(task,{at:serverTime,phase:diagPhase,price:currentPrice,observedLow,status,red,yellow,confirm,info,live,force:isFirstFollowCheck||status==='RED'||status!==previousStatus});
-      if(status==='RED'&&previousStatus!=='RED'){
-        emitFollowReport(task,{closeType:'EXIT',exitPrice:currentPrice,reason,closedAt:serverTime});
-      }
+      if(status==='RED'&&previousStatus!=='RED')emitFollowReport(task,{closeType:'EXIT',exitPrice:currentPrice,reason,closedAt:serverTime});
       if(status==='RED'&&task.timer){clearInterval(task.timer);task.timer=null;}
     }catch(e){
       const taskNow=followMonitors.get(symbol);
-      if(taskNow&&taskNow.status!=='RED'){
-        taskNow.status='YELLOW';taskNow.reason=`Monitor data error: ${e.message||e}`;
-        setMonitorUI(symbol,'YELLOW',taskNow.reason,Date.now());
-      }
+      if(taskNow&&taskNow.status!=='RED'){taskNow.status='YELLOW';taskNow.reason=`Monitor data error: ${e.message||e}`;setMonitorUI(symbol,'YELLOW',taskNow.reason,Date.now());}
       followLog(`Follow ${symbol}: ${e.message||e}`);
-    }finally{
-      const t=followMonitors.get(symbol);if(t)t.refreshing=false;
-    }
+    }finally{const t=followMonitors.get(symbol);if(t)t.refreshing=false;}
   }
 
   async function startFollow(symbol){
@@ -870,7 +807,9 @@
     const scanSource=followScanSource(tr);
     const preservedRow=captureFollowRowModel(symbol,existing);if(preservedRow)preservedRow.scanSource=scanSource;
     const preservedDom=snapshotFollowRow(symbol,entry,stop,scanSource);
-    const entryBtcImpact=scanSource===FOLLOW_AUTO531_SOURCE?followAuto531EntryImpact(symbol,preservedRow):null;
+    const entryBtcImpact=(preservedRow?.btcImpact3m1m&&typeof preservedRow.btcImpact3m1m==='object')
+      ?preservedRow.btcImpact3m1m
+      :(window.CryptoOfferData?.btcImpact3m1mEntries?.[symbol]||null);
     const task={symbol,entryPrice:entry,stopPrice:stop,scanSource,startedAt:now,highest:entry,breakEvenArmed:false,breakEvenArmedAt:0,effectiveExitLevel:NaN,status:'GREEN',reason:'Follow starting',refreshing:false,prevPrice:NaN,prevOi:NaN,prevBasisPct:NaN,prevFundingRate:NaN,prevLiveTime:NaN,oiDeltaHistory:[],live5m:null,liveAnalysis:null,btcImpact:entryBtcImpact,btcImpactError:null,lastHL:NaN,lastHH:NaN,lastSeenLowTime:0,lastSeenHighTime:0,pendingHL:null,hlInitialized:false,tf15:null,tf5:null,tf3:null,timer:null,preservedRow,preservedDom,entryWatchSignal:followDiagWatchSnapshot(symbol,tr),diagnostics:[],lastDiagnosticAt:NaN,lastDiagStatus:'',diagHighestPnl:0,diagLowestPnl:0};
     tr.dataset.followSession=String(now);tr.dataset.followPreserved='true';tr.dataset.scanSource=scanSource;
     followMonitors.set(symbol,task);setLiveUI(symbol,'','');setMonitorUI(symbol,'GREEN','Follow starting…',now);
@@ -893,13 +832,7 @@
     return Number((entry*0.98).toPrecision(12)).toString();
   }
 
-  document.getElementById('candidateBody').addEventListener('input',e=>{
-    const input=e.target;
-    if(!(input instanceof HTMLInputElement)||input.dataset.role!=='entry')return;
-    const tr=input.closest('tr[data-symbol]');if(!tr)return;
-    const stopInput=tr.querySelector('[data-role="stop"]');if(!stopInput||stopInput.disabled)return;
-    const entry=followNum(input.value);stopInput.value=entry>0?followAutoStopValue(entry):'';
-  });
+  
 
   const auto3m1mFollowPending=new Map();
 
@@ -960,12 +893,14 @@
   }
 
 
-  const standardApi={
+  window.CryptoFlowScanner=window.CryptoFlowScanner||{version:'V13.4',modules:{}};
+  window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};
+  window.CryptoFlowScanner.modules.follow31={
     config:FOLLOW_CONFIG,
     liveConfig:FOLLOW_LIVE_CONFIG,
     diagnosticConfig:FOLLOW_DIAG_CONFIG,
-    source:'STANDARD',
-    profile:'STANDARD',
+    source:'Auto 3m-1m Scan',
+    profile:'3m/1m',
     startFollow,
     startAuto3m1mFollow,
     drainPending:drainAuto3m1mFollowPending,
@@ -976,96 +911,4 @@
     getPreservedRows,
     restoreRowsUI:restoreFollowRowsUI
   };
-
-  function followModuleList(){
-    const m=window.CryptoFlowScanner?.modules||{};
-    return [m.follow531,m.follow153,m.follow31,standardApi].filter(Boolean);
-  }
-
-  function followApiForSource(source){
-    const s=String(source||'').trim();
-    const m=window.CryptoFlowScanner?.modules||{};
-    if(s==='Auto 5m-3m-1m Scan'&&m.follow531)return m.follow531;
-    if(s==='Auto 15m-5m-3m Scan'&&m.follow153)return m.follow153;
-    if(s==='Auto 3m-1m Scan'&&m.follow31)return m.follow31;
-    return standardApi;
-  }
-
-  function followOwnerApi(symbol){
-    const s=String(symbol||'').trim().toUpperCase();
-    if(!s)return null;
-    for(const api of followModuleList())if(api?.isFollowing?.(s))return api;
-    return null;
-  }
-
-  function followRowSource(symbol){
-    const tr=followRow(String(symbol||'').trim().toUpperCase());
-    return followScanSource(tr);
-  }
-
-  const followRouter={
-    config:FOLLOW_CONFIG,
-    liveConfig:FOLLOW_LIVE_CONFIG,
-    diagnosticConfig:FOLLOW_DIAG_CONFIG,
-    startFollow:async symbol=>{
-      const s=String(symbol||'').trim().toUpperCase();if(!s)return false;
-      const owner=followOwnerApi(s);
-      if(owner)return await owner.startFollow(s);
-      return await followApiForSource(followRowSource(s)).startFollow(s);
-    },
-    startAuto3m1mFollow:async detail=>{
-      const api=window.CryptoFlowScanner?.modules?.follow31;
-      return api?.startAuto3m1mFollow
-        ?await api.startAuto3m1mFollow(detail)
-        :await standardApi.startAuto3m1mFollow(detail);
-    },
-    stopFollow:(symbol,opts)=>{
-      const owner=followOwnerApi(symbol);
-      return owner?.stopFollow?.(String(symbol||'').trim().toUpperCase(),opts);
-    },
-    isFollowing:symbol=>!!followOwnerApi(symbol),
-    getActiveSymbols:()=>[...new Set(followModuleList().flatMap(api=>api?.getActiveSymbols?.()||[]).map(s=>String(s||'').trim().toUpperCase()).filter(Boolean))],
-    getDiagnostics:symbol=>{
-      const owner=followOwnerApi(symbol);
-      return owner?.getDiagnostics?.(String(symbol||'').trim().toUpperCase())||null;
-    },
-    getPreservedRows:()=>{
-      const out=[],seen=new Set();
-      for(const api of followModuleList()){
-        for(const row of api?.getPreservedRows?.()||[]){
-          const s=String(row?.symbol||'').trim().toUpperCase();
-          if(!s||seen.has(s))continue;
-          seen.add(s);out.push(row);
-        }
-      }
-      return out;
-    },
-    restoreRowsUI:()=>{
-      for(const api of followModuleList())api?.restoreRowsUI?.();
-    },
-    drainPending:()=>{
-      window.CryptoFlowScanner?.modules?.follow31?.drainPending?.();
-      standardApi.drainPending?.();
-    },
-    apiForSource:followApiForSource,
-    ownerApi:followOwnerApi,
-    standard:standardApi
-  };
-
-  document.addEventListener('cryptooffer:auto3m1m-follow-request',event=>{
-    void followRouter.startAuto3m1mFollow(event?.detail||{});
-  });
-
-  document.getElementById('candidateBody')?.addEventListener('click',e=>{
-    const btn=e.target.closest?.('[data-action="follow"]');if(!btn)return;
-    const symbol=btn.dataset.symbol;if(symbol)void followRouter.startFollow(symbol);
-  });
-
-  document.addEventListener('cryptooffer:scan-start',()=>{followRouter.restoreRowsUI();});
-  document.addEventListener('cryptooffer:candidates-rendered',()=>{followRouter.restoreRowsUI();followRouter.drainPending();});
-
-  window.CryptoFlowScanner=window.CryptoFlowScanner||{version:'V13.4',modules:{}};
-  window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};
-  window.CryptoFlowScanner.modules.followStandard=standardApi;
-  window.CryptoFlowScanner.modules.follow=followRouter;
 })();

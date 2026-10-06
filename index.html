@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- UI Version: 14.46 — added Auto5m3m1m + Auto15m5m3m UI integration -->
+<!-- UI Version: 14.48 — Auto grid event/render fix -->
 <html lang="tr">
 <head>
 <meta charset="utf-8">
@@ -421,11 +421,15 @@ body{padding-top:54px;padding-bottom:24px}
 <script src="js/CoinUniverse.js"></script>
 <script src="js/ApiSettings.js?v=1.1"></script>
 <script src="js/BTCImpact3m1m.js?v=1.0"></script>
-<script src="js/Auto3m1mScan.js?v=1.5-match531-1"></script>
 <script src="js/BTCImpact5m3m1m.js?v=1.0"></script>
-<script src="js/Auto5m3m1mScan.js?v=1.2-watchfix1"></script>
+<!-- Shared headless Auto runtime. Browser adapter is inline after Follow.js to avoid controller-file load/cache failures. -->
+<script src="js/BinanceStreamService.js?v=3.4-healthfix"></script>
+<script src="js/WatchService.js?v=3.3-inlineadapter"></script>
+<script src="js/AutoScanUI.js?v=3.4-gridfix"></script>
+<script src="js/Auto3m1mCore.js?v=3.5-diagfix"></script>
+<script src="js/Auto5m3m1mCore.js?v=3.4-lifecyclefix"></script>
+<script src="js/Auto15m5m3mCore.js?v=3.5-diagfix"></script>
 <script src="js/BTCImpact15m5m3m.js?v=1.0"></script>
-<script src="js/Auto15m5m3mScan.js?v=1.3-wsfix2"></script>
 <script src="js/StartScan.js?v=14.19"></script>
 <script src="js/StartScan15m5m3m.js?v=14.44"></script>
 <script src="js/StartScan5m3m1m.js?v=14.44"></script>
@@ -462,8 +466,11 @@ body{padding-top:54px;padding-bottom:24px}
 
       const api = window[moduleName];
       if (!api || typeof api.scan !== 'function') {
+        const adapterError = window.AutoAdapterErrors?.[moduleName];
         setMainStatus(
-          `${label}: js/${fileName} yüklenemedi veya ${moduleName}.scan() bulunamadı.`,
+          adapterError
+            ? `${label}: ${adapterError}`
+            : `${label}: js/${fileName} yüklenemedi veya ${moduleName}.scan() bulunamadı.`,
           'bad'
         );
         return;
@@ -487,18 +494,20 @@ body{padding-top:54px;padding-bottom:24px}
 
   function init() {
     bindScanButton('startScan153Btn', 'StartScan153', '15m-5m-3m Scan', 'StartScan15m5m3m.js');
-    bindScanButton('auto15m5m3mScanBtn', 'Auto15m5m3mScan', 'Auto15m5m3m Scan', 'Auto15m5m3mScan.js');
+    bindScanButton('auto15m5m3mScanBtn', 'Auto15m5m3mScan', 'Auto15m5m3m Scan', 'Auto15m5m3mCore.js + inline adapter');
     bindScanButton('startScan531Btn', 'StartScan531', '5m-3m-1m Scan', 'StartScan5m3m1m.js');
-    bindScanButton('auto5m3m1mScanBtn', 'Auto5m3m1mScan', 'Auto5m3m1m Scan', 'Auto5m3m1mScan.js');
-    bindScanButton('auto3m1mScanBtn', 'Auto3m1mScan', 'Auto3m1m Scan', 'Auto3m1mScan.js');
+    bindScanButton('auto5m3m1mScanBtn', 'Auto5m3m1mScan', 'Auto5m3m1m Scan', 'Auto5m3m1mCore.js + inline adapter');
+    bindScanButton('auto3m1mScanBtn', 'Auto3m1mScan', 'Auto3m1m Scan', 'Auto3m1mCore.js + inline adapter');
     bindScanButton('lowestScanBtn', 'LowestScan', 'LowerScan', 'LowestScan.js');
     bindScanButton('highestScanBtn', 'HighestScan', 'HighestScan', 'HighestScan.js');
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
+  // Inline Auto browser adapter is initialized after Follow.js. Bind compatibility
+  // buttons at window load so all Auto*Scan aliases are guaranteed to exist.
+  if (document.readyState === 'complete') {
     init();
+  } else {
+    window.addEventListener('load', init, { once: true });
   }
 })();
 </script>
@@ -511,6 +520,185 @@ body{padding-top:54px;padding-bottom:24px}
 <script src="js/Follow15m5m3m.js?v=1.0"></script>
 <script src="js/Follow3m1m.js?v=1.0"></script>
 <script src="js/Follow.js?v=split4"></script>
+<script>
+(() => {
+  'use strict';
+
+  const root = window;
+  root.AutoAdapterErrors = root.AutoAdapterErrors || {};
+
+  function setMainStatus(message, cls = 'info') {
+    const el = document.getElementById('mainStatus');
+    if (!el) return;
+    el.textContent = message;
+    el.classList.remove('good', 'warn', 'bad', 'info');
+    if (cls) el.classList.add(cls);
+  }
+
+  function requireShared() {
+    const missing = [];
+    if (!root.BinanceStreamService?.BinanceStreamService) missing.push('BinanceStreamService.js');
+    if (!root.WatchService) missing.push('WatchService.js');
+    if (!root.AutoScanUI) missing.push('AutoScanUI.js');
+    if (missing.length) throw new Error(`Shared Auto dependencies missing: ${missing.join(', ')}`);
+  }
+
+  function createAdapter(cfg) {
+    try {
+      requireShared();
+      const core = root[cfg.coreName];
+      if (!core?.configure || typeof core.scan !== 'function') {
+        throw new Error(`${cfg.coreName}.configure()/scan() bulunamadı.`);
+      }
+
+      const ui = new root.AutoScanUI();
+      const stream = new root.BinanceStreamService.BinanceStreamService({
+        requiredTimeframes: cfg.timeframes.slice(),
+        log: message => ui.log(message)
+      });
+
+      const follow = root.CryptoFlowScanner?.modules?.follow || null;
+      const followGateway = {
+        getActiveSymbols: () => follow?.getActiveSymbols?.() || [],
+        isFollowing: symbol => !!follow?.isFollowing?.(symbol),
+        prepareInputs: (symbol, price) => ui.prepareFollowInputs(symbol, price),
+        startFollow: async symbol => {
+          if (typeof follow?.startFollow === 'function') return follow.startFollow(symbol);
+          const button = [...document.querySelectorAll('#candidateBody [data-action="follow"]')]
+            .find(x => x.dataset.symbol === symbol);
+          if (button) {
+            button.click();
+            return true;
+          }
+          return false;
+        }
+      };
+
+      let watch = null;
+      watch = new root.WatchService({
+        marketDataStore: stream.store,
+        getSettings: () => core.settings,
+        getCapacity: () => core.openSlots,
+        onGreen: event => {
+          const state = watch.get(event.symbol);
+          if (state && !core.state.greenQueue.includes(event.symbol)) {
+            core.state.greenQueue.push(event.symbol);
+          }
+          document.dispatchEvent(new CustomEvent(cfg.greenEvent, { detail: event }));
+        },
+        formatPrice: value => String(Number(value?.toPrecision?.(10) ?? value))
+      });
+
+      const impact = root[cfg.impactName] || null;
+      if (impact?.setMarketDataProvider) {
+        impact.setMarketDataProvider(symbol => {
+          const normalized = String(symbol || '').trim().toUpperCase();
+          if (!normalized ||
+              !stream.store.isReady(normalized, cfg.timeframes) ||
+              !stream.store.isReady('BTCUSDT', cfg.timeframes)) return null;
+
+          const at = Date.now() + Number(core.state.serverOffsetMs || 0);
+          const side = sym => {
+            const intervals = {};
+            for (const tf of cfg.snapshotOrder) {
+              const snap = stream.store.getSnapshot(sym, tf, at);
+              intervals[tf] = { closed: snap.closed, current: snap.current };
+            }
+            const book = stream.store.book(sym);
+            const bid = Number(book?.bidPrice);
+            const ask = Number(book?.askPrice);
+            const fallback = intervals[cfg.priceTf];
+            const price = bid > 0 && ask > 0
+              ? (bid + ask) / 2
+              : Number(fallback?.current?.close || fallback?.closed?.at(-1)?.close);
+            return { price, intervals };
+          };
+
+          const btc = side('BTCUSDT');
+          const coin = normalized === 'BTCUSDT' ? btc : side(normalized);
+          return { at, source: cfg.cacheSource, btc, coin };
+        });
+      }
+
+      core.configure({
+        streamService: stream,
+        watchService: watch,
+        settingsProvider: () => root.ApiSettings || {},
+        persistence: {
+          getItem: key => localStorage.getItem(key),
+          setItem: (key, value) => localStorage.setItem(key, value),
+          removeItem: key => localStorage.removeItem(key)
+        },
+        universeProvider: async () => {
+          if (!root.CoinUniverse?.getAllowedCoins) throw new Error('CoinUniverse.js yüklenmedi.');
+          return root.CoinUniverse.getAllowedCoins();
+        },
+        followGateway,
+        btcImpactGateway: impact,
+        eventSink: event => ui.handle(event)
+      });
+
+      const api = {
+        scan: () => core.scan(),
+        start: () => core.start(),
+        cancel: () => core.cancel(),
+        stop: () => core.stop(),
+        get running() { return core.running; },
+        state: core.state,
+        source: core.source,
+        timeframes: core.timeframes,
+        get settings() { return core.settings; },
+        get watchedSymbols() { return core.watchedSymbols; },
+        get activeFollowSymbols() { return core.activeFollowSymbols; },
+        get openSlots() { return core.openSlots; }
+      };
+
+      root[cfg.aliasName] = api;
+      root.CryptoFlowScanner = root.CryptoFlowScanner || { version: 'V14.19', modules: {} };
+      root.CryptoFlowScanner.modules = root.CryptoFlowScanner.modules || {};
+      root.CryptoFlowScanner.modules[cfg.moduleKey] = api;
+
+      document.addEventListener('cryptooffer:follow-complete', event => {
+        core.onFollowComplete(event?.detail?.symbol);
+      });
+
+      delete root.AutoAdapterErrors[cfg.aliasName];
+      console.info(`${cfg.aliasName} inline browser adapter ready.`);
+      return api;
+    } catch (error) {
+      const message = `${cfg.aliasName} adapter failed: ${error?.message || error}`;
+      root.AutoAdapterErrors[cfg.aliasName] = String(error?.stack || error?.message || error);
+      console.error(message, error);
+      setMainStatus(message, 'bad');
+      return null;
+    }
+  }
+
+  createAdapter({
+    aliasName: 'Auto3m1mScan', coreName: 'Auto3m1mCore', impactName: 'BTCImpact3m1m',
+    moduleKey: 'auto3m1mScan', timeframes: ['3m','1m'], snapshotOrder: ['1m','3m'], priceTf: '1m',
+    cacheSource: 'AUTO31_WS_CACHE', greenEvent: 'cryptooffer:auto3m1m-watch-green'
+  });
+  createAdapter({
+    aliasName: 'Auto5m3m1mScan', coreName: 'Auto5m3m1mCore', impactName: 'BTCImpact5m3m1m',
+    moduleKey: 'auto5m3m1mScan', timeframes: ['5m','3m','1m'], snapshotOrder: ['1m','3m','5m'], priceTf: '1m',
+    cacheSource: 'AUTO531_WS_CACHE', greenEvent: 'cryptooffer:auto5m3m1m-watch-green'
+  });
+  createAdapter({
+    aliasName: 'Auto15m5m3mScan', coreName: 'Auto15m5m3mCore', impactName: 'BTCImpact15m5m3m',
+    moduleKey: 'auto15m5m3mScan', timeframes: ['15m','5m','3m'], snapshotOrder: ['3m','5m','15m'], priceTf: '3m',
+    cacheSource: 'AUTO153_WS_CACHE', greenEvent: 'cryptooffer:auto15m5m3m-watch-green'
+  });
+
+  document.getElementById('cancelBtn')?.addEventListener('click', () => {
+    for (const name of ['Auto3m1mScan','Auto5m3m1mScan','Auto15m5m3mScan']) {
+      const api = root[name];
+      if (api?.running) api.cancel();
+    }
+  });
+})();
+
+</script>
 <script src="js/AutoWatch.js?v=fix14"></script>
 <script src="js/OneMScan.js?v=14.23"></script>
 <script src="js/BookScan.js?v=14.25"></script>

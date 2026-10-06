@@ -1,0 +1,21 @@
+(() => {
+'use strict';
+if(!globalThis.BinanceStreamService?.BinanceStreamService||!globalThis.WatchService||!globalThis.Auto15m5m3mCore||!globalThis.AutoScanUI){console.error('Auto15m5m3m dependencies missing');return;}
+const ui=new AutoScanUI();
+const stream=new BinanceStreamService.BinanceStreamService({requiredTimeframes:['15m','5m','3m'],log:m=>ui.log(m)});
+const core=Auto15m5m3mCore;
+const follow=window.CryptoFlowScanner?.modules?.follow||null;
+const followGateway={
+ getActiveSymbols:()=>follow?.getActiveSymbols?.()||[], isFollowing:s=>!!follow?.isFollowing?.(s),
+ prepareInputs:(s,p)=>ui.prepareFollowInputs(s,p), startFollow:async s=>{if(typeof follow?.startFollow==='function')return follow.startFollow(s);const b=[...document.querySelectorAll('#candidateBody [data-action="follow"]')].find(x=>x.dataset.symbol===s);if(b){b.click();return true;}return false;}
+};
+let watch;
+watch=new WatchService({marketDataStore:stream.store,getSettings:()=>core.settings,getCapacity:()=>core.openSlots,onGreen:e=>{const w=watch.get(e.symbol);if(w&&!core.state.greenQueue.includes(e.symbol))core.state.greenQueue.push(e.symbol);document.dispatchEvent(new CustomEvent('cryptooffer:auto15m5m3m-watch-green',{detail:e}));},formatPrice:x=>String(Number(x.toPrecision?.(10)??x))});
+if(window.BTCImpact15m5m3m?.setMarketDataProvider){window.BTCImpact15m5m3m.setMarketDataProvider(symbol=>{const normalized=String(symbol||'').trim().toUpperCase(),tfs=['15m','5m','3m'];if(!normalized||!stream.store.isReady(normalized,tfs)||!stream.store.isReady('BTCUSDT',tfs))return null;const at=Date.now()+Number(core.state.serverOffsetMs||0),side=sym=>{const intervals={};for(const tf of ['3m','5m','15m']){const snap=stream.store.getSnapshot(sym,tf,at);intervals[tf]={closed:snap.closed,current:snap.current};}const b=stream.store.book(sym),bid=Number(b?.bidPrice),ask=Number(b?.askPrice),price=bid>0&&ask>0?(bid+ask)/2:Number(intervals['3m']?.current?.close||intervals['3m']?.closed?.at(-1)?.close);return {price,intervals};};return {at,source:'AUTO153_WS_CACHE',btc:side('BTCUSDT'),coin:side(normalized)};});}
+core.configure({streamService:stream,watchService:watch,settingsProvider:()=>window.ApiSettings||{},persistence:{getItem:k=>localStorage.getItem(k),setItem:(k,v)=>localStorage.setItem(k,v),removeItem:k=>localStorage.removeItem(k)},universeProvider:async()=>{if(!window.CoinUniverse?.getAllowedCoins)throw new Error('CoinUniverse.js yüklenmedi.');return window.CoinUniverse.getAllowedCoins();},followGateway,btcImpactGateway:window.BTCImpact15m5m3m||null,eventSink:e=>ui.handle(e)});
+const api={scan:()=>core.scan(),start:()=>core.start(),cancel:()=>core.cancel(),stop:()=>core.stop(),get running(){return core.running;},state:core.state,source:core.source,timeframes:core.timeframes,get settings(){return core.settings;},get watchedSymbols(){return core.watchedSymbols;},get activeFollowSymbols(){return core.activeFollowSymbols;},get openSlots(){return core.openSlots;}};
+window.Auto15m5m3mScan=api;window.CryptoFlowScanner=window.CryptoFlowScanner||{version:'V14.19',modules:{}};window.CryptoFlowScanner.modules=window.CryptoFlowScanner.modules||{};window.CryptoFlowScanner.modules.auto15m5m3mScan=api;
+document.getElementById('auto15m5m3mScanBtn')?.addEventListener('click',e=>{e.preventDefault();if(core.running)core.cancel();else void core.start();});
+document.getElementById('cancelBtn')?.addEventListener('click',()=>{if(core.running)core.cancel();});
+document.addEventListener('cryptooffer:follow-complete',e=>core.onFollowComplete(e?.detail?.symbol));
+})();

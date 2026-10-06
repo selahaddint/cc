@@ -1,0 +1,22 @@
+Load BEFORE Follow.js:
+1. BinanceStreamService.js
+2. WatchService.js
+3. AutoScanUI.js
+4. Auto3m1mCore.js
+5. Auto5m3m1mCore.js
+6. Auto15m5m3mCore.js
+7. BTCImpact3m1m.js (if used)
+8. BTCImpact5m3m1m.js (if used)
+9. BTCImpact15m5m3m.js (if used)
+
+Then load Follow.js.
+
+Load AFTER Follow.js:
+10. Auto3m1mBrowserController.js
+11. Auto5m3m1mBrowserController.js
+12. Auto15m5m3mBrowserController.js
+
+IMPORTANT:
+- Remove/disable old Auto3m1mScan.js, Auto5m3m1mScan.js, Auto15m5m3mScan.js script tags.
+- Controllers expose the same compatibility globals: Auto3m1mScan, Auto5m3m1mScan, Auto15m5m3mScan.
+- Core files remain headless; browser dependencies exist only in BrowserController/AutoScanUI.

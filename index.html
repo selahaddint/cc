@@ -244,6 +244,10 @@ body{padding-top:54px;padding-bottom:24px}
 .frozenLevelItem span{font-size:10px;letter-spacing:.5px;font-weight:800}
 .frozenLevelItem strong{font-size:12px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .frozenLevelItem.buy span{color:#4ade80}.frozenLevelItem.sell span{color:#fbbf24}
+.frozenLevelItem.invalidSell{border-color:#53657a;background:#16212f}
+.frozenLevelItem.invalidSell span{color:#aebed0}
+.frozenLevelItem small{font-size:10px;line-height:1.35;color:#92a8c0}
+.frozenLevelItem.invalidSell small{color:#d5b878}
 .frozenChartEmpty{padding:15px;font-size:12px;color:#ffd36d}
 .frozenChartNote{font-size:11px;color:#93a4bc;line-height:1.5;margin:9px 0 0}
 @media(max-width:850px){.frozenLevelGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -339,7 +343,7 @@ body{padding-top:54px;padding-bottom:24px}
       <div class="frozenLineStatus" id="frozenLineChartStatus" role="status">SELECT satırındaki coin adına tıkla.</div>
       <div id="frozenLineChartGraphic" class="frozenGraphicWrap"></div>
       <div id="frozenLineChartLevels" class="frozenLevelGrid"></div>
-      <p class="frozenChartNote">Grafik Binance Futures kapanmış mumlarıyla tarayıcıda hesaplanır. BUY1/BUY2 yeşil, SELL1–SELL4 sarı; çizgiler onaylanmış HH/LH noktalarından gelir. Watch ve Follow çalıştırılmaz. Mevcut C# SELECT anı ile bugünkü çizgiler zamanla farklılaşabilir.</p>
+      <p class="frozenChartNote">Grafik Binance Futures kapanmış mumlarından hesaplanır. BUY1/BUY2 yeşildir. Sadece BUY1 üzerindeki SELL seviyeleri sarı direnç çizgisidir; BUY bölgesinde veya altında kalan ham FROZEN SELL fiyatları tabloda uyarıyla gösterilir, formül sonucu değiştirilmez. Watch/Follow kullanılmaz. SELECT anı ile güncel çizgiler farklılaşabilir.</p>
     </section>
 
     <section class="card visuallyHiddenSupport" aria-hidden="true">
@@ -2602,8 +2606,8 @@ body{padding-top:54px;padding-bottom:24px}
 <footer class="appBottomBar">Not investment advice.</footer>
 
 
-<script src="js/FrozenLineCore.js?v=1.0"></script>
-<script src="js/FrozenLineBrowser.js?v=1.0"></script>
+<script src="js/FrozenLineCore.js?v=1.3"></script>
+<script src="js/FrozenLineBrowser.js?v=1.3"></script>
 <script src="js/Auto4h1hLineScan.js?v=1.0"></script>
 <script src="js/Auto1h15mLineScan.js?v=1.0"></script>
 <script src="js/Auto15m5mLineScan.js?v=1.0"></script>

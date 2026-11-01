@@ -88,8 +88,11 @@
       sell1:sell1.price,sell2:sell2.price,sell3:sell3.price,sell4:sell4.price,
       setupTime:last.closeTime,signalTime:now,
       lastOpen:last.open,lastClose:last.close,
+      previousOpen:lower[lower.length-2].open,previousClose:lower[lower.length-2].close,
       anchors:{sell1,sell2,sell3,sell4,buy1,buy2,minimum,maximum},
-      target(entry) { return [this.sell1,this.sell2,this.sell3,this.sell4].filter(v=>v>entry).sort((a,b)=>a-b)[0] || null; }
+      // Only a SELL strictly ABOVE the entire BUY zone is a valid upper resistance target.
+      // Keep all six FROZEN HH/LH prices unchanged.
+      target(entry) { return [this.sell1,this.sell2,this.sell3,this.sell4].filter(v=>v>this.buy1 && v>entry).sort((a,b)=>a-b)[0] || null; }
     };
   }
 
@@ -120,10 +123,38 @@
     ]);
     return {levels:compute(symbol,lower,upper,config),lower,upper,config};
   }
+  // New scan-only gate: ±15% from the LOWER BUY line (BUY2).
+  // Keep the existing BUY1 ceiling for the bullish in-zone setup.
+  // For below-BUY2 SELECT, require a CLOSED red-to-green reversal and a live ASK
+  // no lower than the bullish candle close. Never interpret an unfinished candle
+  // as reversal evidence. Six frozen HH/LH level calculations are unchanged.
+  function entryMode(levels, entry=levels?.lastClose) {
+    if (!levels || !Number.isFinite(entry) || !(entry>0) ||
+        !Number.isFinite(levels.buy1) || !Number.isFinite(levels.buy2) ||
+        !(levels.buy2>0 && levels.buy2<levels.buy1) ||
+        !Number.isFinite(levels.lastOpen) || !Number.isFinite(levels.lastClose) ||
+        !(levels.lastClose>levels.lastOpen) ||
+        typeof levels.target!=='function') return null;
+    // SELL above the entire BUY zone remains mandatory for both modes.
+    const target=levels.target(entry);
+    if (!Number.isFinite(target) || target<=levels.buy1 || target<=entry) return null;
+    const buy2=levels.buy2;
+    // Use relative distances to make exactly +15.00%/-15.00% inclusive
+    // even for decimal coin prices (avoid 100*1.15 => 114.99999999999).
+    const withinUpper=v=>v>=buy2 && v<=levels.buy1 && (v-buy2)/buy2<=0.15+Number.EPSILON;
+    const withinLower=v=>v<buy2 && (buy2-v)/buy2<=0.15+Number.EPSILON;
+    if (withinUpper(levels.lastClose) && withinUpper(entry)) return 'BUY_ZONE';
+    // A red previous candle followed by a green last CLOSED candle marks the turn.
+    // Last closed price AND current ASK must both remain within -15% to BUY2.
+    if (withinLower(levels.lastClose) && withinLower(entry) &&
+        Number.isFinite(levels.previousOpen) && Number.isFinite(levels.previousClose) &&
+        levels.previousClose<levels.previousOpen &&
+        levels.lastClose>levels.previousClose && entry>=levels.lastClose)
+      return 'RECOVERY_BELOW_BUY2';
+    return null;
+  }
   function qualifies(levels,entry=levels?.lastClose) {
-    if (!levels || !(entry>0)) return false;
-    return levels.lastClose>=levels.buy2 && levels.lastClose<=levels.buy1 &&
-      levels.lastClose>levels.lastOpen && levels.target(entry)>0;
+    return entryMode(levels,entry)!==null;
   }
   async function loadPrescreen(symbol, interval, signal) {
     return fetchBars(symbol,interval,2,signal);
@@ -138,5 +169,5 @@
       return ask>0 && Number.isFinite(ask)?ask:null;
     } catch (err) { if (signal?.aborted) throw err;return null; }
   }
-  global.FrozenLineCore=Object.freeze({STRATEGIES,PERIOD,parseBars,continuous,confirmedSwings,compute,load,loadPrescreen,qualifies,bestAsk});
+  global.FrozenLineCore=Object.freeze({STRATEGIES,PERIOD,parseBars,continuous,confirmedSwings,compute,load,loadPrescreen,entryMode,qualifies,bestAsk});
 })(window);

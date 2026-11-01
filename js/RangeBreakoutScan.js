@@ -1,149 +1,70 @@
 /*
- * RangeBreakoutScan.js
+ * RangeBreakoutScan.js — 5 kapanmis 1m mumun fiyat ve hacim taramasi.
  *
- * Amaç:
- * - Seçilen zaman penceresinde fiyatın uzun süre dar/yatay bir bölgede
- *   gezinmesini (range/base) tespit etmek.
- * - Fiyat bu bölgenin üst sınırını yeni kırmışsa ve henüz fazla uzaklaşmamışsa
- *   SELECT üretmek.
+ * SELECT icin ZORUNLU IKI kosul (20 mum hesabi ve eski range filtresi kaldirildi):
+ *  1) Son (5.) kapanmis 1m mumun kapanis fiyati >= onceki 4 mumun
+ *     ortalama govde fiyatinin 1.03 kati.
+ *     Ortalama govde fiyati = (open + close) / 2.
+ *  2) Ayni (5.) mumun hacmi >= onceki 4 kapanmis mumun
+ *     ortalama hacminin 2.5 kati (en az +%150 hacim artisi).
  *
- * Bu dosya tamamen bağımsızdır. StartScan / Watch / Follow kodlarına dokunmaz.
- * index.html entegrasyonunda yalnızca window.RangeBreakoutScan.scan(...) çağrılması yeterlidir.
+ * Mum fitilleri, henuz kapanmamis mumlar ve anlik ticker fiyati SELECT
+ * kosullarina katilmaz. Onceki 4 mumun range bilgisi sadece UI icindir;
+ * ek bir range kirilimi sarti UYGULANMAZ.
+ *
+ * HTML entegrasyonu: window.RangeBreakoutScan.scan({symbols, config,
+ * onProgress, signal}), stop(), getPeriods(), rangebreakout:results eventi.
+ * UI uyumu icin mevcut '1H' period anahtari korunur; analiz daima 5x1m'dir.
  */
-
 (function (global) {
   'use strict';
 
   const API_BASE = 'https://fapi.binance.com';
+  const BAR_MS = 60000;
+  const REFERENCE_BARS = 4;
+  const REQUIRED_CLOSED_BARS = 5;
+  const REQUIRED_PRICE_GAIN_PCT = 3;
+  const REQUIRED_VOLUME_RATIO = 2.5;
+  const REQUIRED_VOLUME_INCREASE_PCT = 150;
 
   const PERIODS = Object.freeze({
-    '2M':  { label: '2 Months', lookbackMs: 60 * 24 * 60 * 60 * 1000, interval: '4h', limit: 360, signalBars: 3, minRangeBars: 36 },
-    '1M':  { label: '1 Month',  lookbackMs: 30 * 24 * 60 * 60 * 1000, interval: '1h', limit: 720, signalBars: 6, minRangeBars: 72 },
-    '1W':  { label: '1 Week',   lookbackMs:  7 * 24 * 60 * 60 * 1000, interval: '15m', limit: 672, signalBars: 8, minRangeBars: 64 },
-    '3D':  { label: '3 Days',   lookbackMs:  3 * 24 * 60 * 60 * 1000, interval: '15m', limit: 288, signalBars: 6, minRangeBars: 40 },
-    '1D':  { label: '1 Day',    lookbackMs:      24 * 60 * 60 * 1000, interval: '5m', limit: 288, signalBars: 6, minRangeBars: 36 },
-    '8H':  { label: '8 Hours',  lookbackMs:       8 * 60 * 60 * 1000, interval: '5m', limit: 96, signalBars: 5, minRangeBars: 24 },
-    '4H':  { label: '4 Hours',  lookbackMs:       4 * 60 * 60 * 1000, interval: '5m', limit: 48, signalBars: 4, minRangeBars: 18 },
-    '1H':  { label: '1 Hour',    lookbackMs:           60 * 60 * 1000, interval: '1m', limit: 60, signalBars: 5, minRangeBars: 20 },
-    '15M': { label: '15 Minutes', lookbackMs:        15 * 60 * 1000, interval: '1m', limit: 15, signalBars: 3, minRangeBars: 7 },
-    '5M':  { label: '5 Minutes',  lookbackMs:         5 * 60 * 1000, interval: '1m', limit: 5, signalBars: 2, minRangeBars: 3 }
+    '1H': Object.freeze({
+      label: '5 Minutes (5 closed 1m candles)',
+      lookbackMs: REQUIRED_CLOSED_BARS * BAR_MS,
+      interval: '1m',
+      limit: 9,               // 5 kapanmis + 1 acik + kucuk tampon
+      signalBars: 1,
+      minRangeBars: REFERENCE_BARS
+    })
   });
 
   const DEFAULT_CONFIG = Object.freeze({
-    // Range toplam genişliği en fazla %15.
-    maxRangeWidthPct: 15,
-
-    // Aşırı dar ve anlamsız mikro-range'leri ayıklar.
-    minRangeWidthPct: 0.20,
-
-    // Range içindeki yönlü eğilim çok kuvvetliyse bunu yatay gezinme sayma.
-    maxAbsoluteSlopePct: 4.0,
-    maxSlopeToRangeRatio: 0.35,
-
-    // Range üst / alt bölgesine tekrarlı temas şartı.
-    boundaryZoneRatio: 0.18,
-    minBoundaryTouches: 2,
-
-    // Breakout buffer sabit %15 değildir; ATR + küçük yüzde ile dinamiktir.
-    minBreakoutBufferPct: 0.35,
-    atrBreakoutMultiplier: 0.25,
-
-    // Breakout'tan sonra çok uzaklaşan coin SELECT olmasın.
-    maxChasePct: 5.0,
-    maxChaseAtr: 2.0,
-    maxChaseRangeRatio: 0.35,
-
-    // İlk tarama ön filtresi. 24h high'dan çok uzaktaki coinlerde ağır kline isteği yapılmaz.
-    // 0.90 => current >= 24hHigh * 0.90
-    prefilter24hHighRatio: 0.90,
-
-    // Çok düşük likiditeyi zorunlu filtre yapmak istemiyorsak 0 bırakılır.
+    // SELECT icin sabittir, disaridan gelen config dusuremez veya degistiremez.
+    priceAverageBars: REFERENCE_BARS,
+    requiredPriceGainPct: REQUIRED_PRICE_GAIN_PCT,
+    volumeLookbackBars: REFERENCE_BARS,
+    minVolumeIncreasePct: REQUIRED_VOLUME_INCREASE_PCT,
+    volumeMetric: 'volume',       // Binance kline[5], base asset hacmi
+    prefilter24hHighRatio: 0,    // Fiyatin 24h zirveye yakin olmasi gerekli degil
     min24hQuoteVolume: 0,
-
-    // Aynı anda çok fazla istek gönderip rate-limit'e çarpmamak için.
     concurrency: 5,
     requestPauseMs: 120,
-
-    // Null => ön filtreden geçen tüm USDT-M kontratları taranır.
-    // Test veya performans için sayı verilebilir.
     maxSymbols: null,
-
-    // Range ararken farklı pencere uzunlukları denenir.
-    candidateWindowFractions: [1.0, 0.85, 0.70, 0.55, 0.40],
-
-    // Volume sadece bilgi/kalite metriğidir; SELECT için hard-filter değildir.
-    volumeLookbackBars: 20
+    maxSignalAgeMs: 90000
   });
 
   let activeController = null;
 
-  function clamp(v, min, max) {
-    return Math.max(min, Math.min(max, v));
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  function pctChange(a, b) {
-    if (!Number.isFinite(a) || !Number.isFinite(b) || a === 0) return NaN;
-    return ((b - a) / a) * 100;
-  }
-
-  function median(values) {
-    const arr = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
-    if (!arr.length) return NaN;
-    const m = Math.floor(arr.length / 2);
-    return arr.length % 2 ? arr[m] : (arr[m - 1] + arr[m]) / 2;
-  }
-
-  function quantile(values, q) {
-    const arr = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
-    if (!arr.length) return NaN;
-    if (arr.length === 1) return arr[0];
-    const pos = (arr.length - 1) * clamp(q, 0, 1);
-    const base = Math.floor(pos);
-    const rest = pos - base;
-    return arr[base + 1] !== undefined
-      ? arr[base] + rest * (arr[base + 1] - arr[base])
-      : arr[base];
-  }
-
-  function linearRegressionSlope(values) {
-    const n = values.length;
-    if (n < 2) return 0;
-    const xMean = (n - 1) / 2;
-    let ySum = 0;
-    for (const v of values) ySum += v;
-    const yMean = ySum / n;
-    let num = 0;
-    let den = 0;
-    for (let i = 0; i < n; i++) {
-      const dx = i - xMean;
-      num += dx * (values[i] - yMean);
-      den += dx * dx;
-    }
-    return den === 0 ? 0 : num / den;
-  }
-
-  function calcAtr(candles, period = 14) {
-    if (!candles || candles.length < 2) return NaN;
-    const trs = [];
-    for (let i = 1; i < candles.length; i++) {
-      const c = candles[i];
-      const prev = candles[i - 1];
-      const tr = Math.max(
-        c.high - c.low,
-        Math.abs(c.high - prev.close),
-        Math.abs(c.low - prev.close)
-      );
-      trs.push(tr);
-    }
-    const use = trs.slice(-Math.min(period, trs.length));
-    return use.reduce((a, b) => a + b, 0) / use.length;
+  function pctChange(from, to) {
+    return from > 0 && Number.isFinite(to) ? (to / from - 1) * 100 : NaN;
   }
 
   function parseKlines(raw) {
+    if (!Array.isArray(raw)) throw new Error('Binance klines payload is not an array.');
     return raw.map(k => ({
       openTime: Number(k[0]),
       open: Number(k[1]),
@@ -160,30 +81,25 @@
   }
 
   async function fetchJson(url, signal) {
-    const r = await fetch(url, { signal, cache: 'no-store' });
-    if (!r.ok) {
-      const text = await r.text().catch(() => '');
-      const err = new Error(`HTTP ${r.status}: ${text || r.statusText}`);
-      err.status = r.status;
+    const response = await fetch(url, { signal, cache: 'no-store' });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      const err = new Error(`HTTP ${response.status}: ${body || response.statusText}`);
+      err.status = response.status;
       throw err;
     }
-    return r.json();
+    return response.json();
   }
 
   async function getUniverse(signal) {
+    // Toplu istekler; her coin icin ayri 24 saatlik ticker istegi yapilmaz.
     const [exchangeInfo, tickers] = await Promise.all([
       fetchJson(`${API_BASE}/fapi/v1/exchangeInfo`, signal),
       fetchJson(`${API_BASE}/fapi/v1/ticker/24hr`, signal)
     ]);
-
     const tickerMap = new Map(tickers.map(t => [t.symbol, t]));
-
     return exchangeInfo.symbols
-      .filter(s =>
-        s.status === 'TRADING' &&
-        s.quoteAsset === 'USDT' &&
-        s.contractType === 'PERPETUAL'
-      )
+      .filter(s => s.status === 'TRADING' && s.quoteAsset === 'USDT' && s.contractType === 'PERPETUAL')
       .map(s => {
         const t = tickerMap.get(s.symbol);
         if (!t) return null;
@@ -200,372 +116,283 @@
   }
 
   function prefilterUniverse(universe, cfg) {
-    let rows = universe.filter(x => {
-      if (!Number.isFinite(x.lastPrice) || !Number.isFinite(x.high24h) || x.high24h <= 0) return false;
-      if (x.quoteVolume24h < cfg.min24hQuoteVolume) return false;
-      return x.lastPrice >= x.high24h * cfg.prefilter24hHighRatio;
+    const highRatio = Number(cfg.prefilter24hHighRatio) || 0;
+    const minQuoteVolume = Number(cfg.min24hQuoteVolume) || 0;
+    const rows = universe.filter(x => {
+      if (!(x.lastPrice > 0)) return false;
+      if (!(Number.isFinite(x.quoteVolume24h) && x.quoteVolume24h >= minQuoteVolume)) return false;
+      if (highRatio > 0 && !(x.high24h > 0 && x.lastPrice >= x.high24h * highRatio)) return false;
+      return true;
     });
-
-    // Likiditesi daha yüksek olanları önce taramak performansı ve ilk sonuç süresini iyileştirir.
     rows.sort((a, b) => b.quoteVolume24h - a.quoteVolume24h);
-
-    if (Number.isInteger(cfg.maxSymbols) && cfg.maxSymbols > 0) {
-      rows = rows.slice(0, cfg.maxSymbols);
-    }
-    return rows;
+    return Number.isInteger(cfg.maxSymbols) && cfg.maxSymbols > 0
+      ? rows.slice(0, cfg.maxSymbols) : rows;
   }
 
-  function scoreRange(windowCandles, cfg) {
-    if (!windowCandles || windowCandles.length < 3) return null;
-
-    const highs = windowCandles.map(c => c.high);
-    const lows = windowCandles.map(c => c.low);
-    const closes = windowCandles.map(c => c.close);
-
-    // Tek seferlik wick'leri range sınırı sanmamak için robust quantile kullanıyoruz.
-    const rangeHigh = quantile(highs, 0.90);
-    const rangeLow = quantile(lows, 0.10);
-    if (!(rangeHigh > rangeLow) || rangeLow <= 0) return null;
-
-    const rangeWidthPct = pctChange(rangeLow, rangeHigh);
-    if (!Number.isFinite(rangeWidthPct)) return null;
-    if (rangeWidthPct < cfg.minRangeWidthPct || rangeWidthPct > cfg.maxRangeWidthPct) return null;
-
-    const meanClose = closes.reduce((a, b) => a + b, 0) / closes.length;
-    const slopePerBar = linearRegressionSlope(closes);
-    const fittedMove = slopePerBar * Math.max(1, closes.length - 1);
-    const slopePct = meanClose > 0 ? (fittedMove / meanClose) * 100 : 0;
-    const allowedSlopePct = Math.min(
-      cfg.maxAbsoluteSlopePct,
-      Math.max(0.30, rangeWidthPct * cfg.maxSlopeToRangeRatio)
-    );
-    if (Math.abs(slopePct) > allowedSlopePct) return null;
-
-    const zone = (rangeHigh - rangeLow) * cfg.boundaryZoneRatio;
-    const highTouchLevel = rangeHigh - zone;
-    const lowTouchLevel = rangeLow + zone;
-    const highTouches = highs.filter(v => v >= highTouchLevel).length;
-    const lowTouches = lows.filter(v => v <= lowTouchLevel).length;
-    if (highTouches < cfg.minBoundaryTouches || lowTouches < cfg.minBoundaryTouches) return null;
-
-    const trPcts = [];
-    for (let i = 1; i < windowCandles.length; i++) {
-      const c = windowCandles[i];
-      const p = windowCandles[i - 1];
-      const tr = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
-      if (p.close > 0) trPcts.push((tr / p.close) * 100);
+  function validateCandleSeries(candles) {
+    for (let i = 0; i < candles.length; i++) {
+      const c = candles[i];
+      if (!Number.isFinite(c.openTime) ||
+          c.closeTime !== c.openTime + BAR_MS - 1 ||
+          ![c.open, c.high, c.low, c.close].every(v => Number.isFinite(v) && v > 0) ||
+          !Number.isFinite(c.volume) || c.volume < 0 ||
+          !Number.isFinite(c.quoteVolume) || c.quoteVolume < 0) return false;
+      if (i && c.openTime - candles[i - 1].openTime !== BAR_MS) return false;
     }
-    const medianTrPct = median(trPcts);
+    return true;
+  }
 
-    const widthScore = clamp(1 - (rangeWidthPct / cfg.maxRangeWidthPct), 0, 1);
-    const slopeScore = clamp(1 - (Math.abs(slopePct) / Math.max(allowedSlopePct, 0.0001)), 0, 1);
-    const touchScore = clamp(
-      Math.min(highTouches, lowTouches) / Math.max(cfg.minBoundaryTouches * 2, 1),
-      0,
-      1
-    );
-    const durationScore = clamp(windowCandles.length / 100, 0, 1);
+  function evaluateBreakout(symbolInfo, allCandles, now = Date.now()) {
+    // '1H' sadece mevcut HTML'in bekledigi period anahtari, gercek pencere 5m.
+    const basic = { symbol: symbolInfo.symbol, period: '1H', interval: '1m' };
+    const closed = allCandles.filter(c => c.closeTime < now);
+    if (closed.length < REQUIRED_CLOSED_BARS) {
+      return { ...basic, result: 'NOT_READY', reason: 'Son 5 kapanmis 1m mum bulunamadi.' };
+    }
+    const candles = closed.slice(-REQUIRED_CLOSED_BARS);
+    const signalCandle = candles[4];
+    if (now - signalCandle.closeTime > DEFAULT_CONFIG.maxSignalAgeMs) {
+      return { ...basic, result: 'STALE_CANDLE', signalCloseTime: signalCandle.closeTime,
+        reason: 'En son kapanmis 1m mum guncel degil.' };
+    }
+    if (!validateCandleSeries(candles)) {
+      return { ...basic, result: 'DATA_GAP', reason: 'Son 5 kapanmis 1m mumda eksik/bozuk veri var.' };
+    }
 
-    // Score yalnızca en iyi range penceresini seçmek için kullanılır; SELECT doğrudan score'a bağlı değildir.
-    const score = 0.35 * widthScore + 0.30 * slopeScore + 0.20 * touchScore + 0.15 * durationScore;
+    const previous4 = candles.slice(0, REFERENCE_BARS);
+    const average4BodyPrice = previous4.reduce((sum, c) => sum + (c.open + c.close) / 2, 0) / REFERENCE_BARS;
+    const average4Volume = previous4.reduce((sum, c) => sum + c.volume, 0) / REFERENCE_BARS;
+    const average4QuoteVolume = previous4.reduce((sum, c) => sum + c.quoteVolume, 0) / REFERENCE_BARS;
+    const lastClosedVolume = signalCandle.volume;
+    const volumeRatio = average4Volume > 0 ? lastClosedVolume / average4Volume : NaN;
+    const volumeIncreasePct = Number.isFinite(volumeRatio) ? (volumeRatio - 1) * 100 : NaN;
+    const priceIncreasePct = pctChange(average4BodyPrice, signalCandle.close);
+    const pricePassed = Number.isFinite(priceIncreasePct) && priceIncreasePct >= REQUIRED_PRICE_GAIN_PCT - 1e-9;
+    const volumePassed = Number.isFinite(volumeRatio) && volumeRatio >= REQUIRED_VOLUME_RATIO - 1e-9;
+
+    // Range ayrintilari sadece eski HTML'in goruntulemesi icin tutulur;
+    // SELECT karari range kirilimina, yataylik veya wick'e BAGLI DEGIL.
+    const rangeHigh = Math.max(...previous4.map(c => Math.max(c.open, c.close)));
+    const rangeLow = Math.min(...previous4.map(c => Math.min(c.open, c.close)));
+    const rangeWidthPct = pctChange(rangeLow, rangeHigh);
+    const crossedUp = signalCandle.open <= rangeHigh && signalCandle.close > rangeHigh;
+    const priceAboveRange = signalCandle.close > rangeHigh;
+    const breakoutPctAboveRangeHigh = pctChange(rangeHigh, signalCandle.close);
+
+    let result = 'SELECT';
+    let reason = '5. mumun kapanisi onceki 4 mumun ortalama fiyatindan en az %3 yuksek; hacmi de ortalama hacmin en az 2.5 kati.';
+    if (!pricePassed && !volumePassed) {
+      result = 'WAIT';
+      reason = 'Fiyat +%3 ve hacim 2.5x kosullarinin ikisi de saglanmadi.';
+    } else if (!pricePassed) {
+      result = 'PRICE_GAP_LOW';
+      reason = 'Son kapanis onceki 4 mumun ortalama govde fiyatindan en az %3 yuksek degil.';
+    } else if (!volumePassed) {
+      result = 'VOLUME_LOW';
+      reason = 'Son mumun hacmi onceki 4 mumun ortalama hacminin en az 2.5 kati degil.';
+    }
 
     return {
+      ...basic,
+      result,
+      reason,
+      currentPrice: signalCandle.close,
+      lastPrice: symbolInfo.lastPrice,
+      signalOpen: signalCandle.open,
+      signalClose: signalCandle.close,
+      signalOpenTime: signalCandle.openTime,
+      signalCloseTime: signalCandle.closeTime,
+      average4BodyPrice,
+      averagePrice: average4BodyPrice,
+      priceIncreasePct,
+      requiredPriceGainPct: REQUIRED_PRICE_GAIN_PCT,
+      pricePassed,
+      priceGapPassed: pricePassed, // Eski alan adi icin uyumluluk
+      average4Volume,
+      averageVolume: average4Volume,
+      lastClosedVolume,
+      lastClosedBaseVolume: lastClosedVolume,
+      average4BaseVolume: average4Volume,
+      lastClosedQuoteVolume: signalCandle.quoteVolume,
+      average4QuoteVolume,
+      volumeAverageBars: REFERENCE_BARS,
+      priceAverageBars: REFERENCE_BARS,
+      volumeMetric: 'volume',
+      volumeRatio,
+      volumeIncreasePct,
+      requiredVolumeRatio: REQUIRED_VOLUME_RATIO,
+      requiredVolumeIncreasePct: REQUIRED_VOLUME_INCREASE_PCT,
+      volumePassed,
+      // Eski HTML icin onceki ozelliklerin degerleri 4 mum ortalamasidir.
+      average19Volume: average4Volume,
+      average20Volume: average4Volume,
+      average60Volume: average4Volume,
+      average19BaseVolume: average4Volume,
+      average20BaseVolume: average4Volume,
+      average60BaseVolume: average4Volume,
+      average19QuoteVolume: average4QuoteVolume,
+      average20QuoteVolume: average4QuoteVolume,
+      average60QuoteVolume: average4QuoteVolume,
+      average19BodyPrice: average4BodyPrice,
+      averagePriceBelowLastClosePct: Number.isFinite(priceIncreasePct)
+        ? (1 - average4BodyPrice / signalCandle.close) * 100 : NaN,
+      requiredPriceGapPct: REQUIRED_PRICE_GAIN_PCT,
       rangeHigh,
       rangeLow,
       rangeWidthPct,
-      slopePct,
-      highTouches,
-      lowTouches,
-      medianTrPct,
-      score,
-      bars: windowCandles.length,
-      startTime: windowCandles[0].openTime,
-      endTime: windowCandles[windowCandles.length - 1].closeTime
-    };
-  }
-
-  function findBestRange(candles, periodCfg, cfg) {
-    if (!candles || candles.length < periodCfg.minRangeBars + periodCfg.signalBars) return null;
-
-    const baseEndExclusive = candles.length - periodCfg.signalBars;
-    const maxBaseBars = baseEndExclusive;
-    const candidates = [];
-
-    for (const frac of cfg.candidateWindowFractions) {
-      const bars = Math.floor(maxBaseBars * frac);
-      if (bars < periodCfg.minRangeBars) continue;
-      const start = Math.max(0, baseEndExclusive - bars);
-      const windowCandles = candles.slice(start, baseEndExclusive);
-      const scored = scoreRange(windowCandles, cfg);
-      if (scored) {
-        candidates.push({ ...scored, startIndex: start, endIndexExclusive: baseEndExclusive });
-      }
-    }
-
-    if (!candidates.length) return null;
-    candidates.sort((a, b) => b.score - a.score || b.bars - a.bars);
-    return candidates[0];
-  }
-
-  function calcVolumeRatio(candles, signalBars, lookbackBars) {
-    if (!candles || candles.length < 3) return NaN;
-    const signal = candles.slice(-Math.min(signalBars, candles.length));
-    const priorEnd = candles.length - signal.length;
-    const priorStart = Math.max(0, priorEnd - lookbackBars);
-    const prior = candles.slice(priorStart, priorEnd);
-    if (!prior.length || !signal.length) return NaN;
-
-    const signalAvg = signal.reduce((s, c) => s + c.quoteVolume, 0) / signal.length;
-    const priorAvg = prior.reduce((s, c) => s + c.quoteVolume, 0) / prior.length;
-    return priorAvg > 0 ? signalAvg / priorAvg : NaN;
-  }
-
-  function evaluateBreakout(symbolInfo, candles, periodKey, periodCfg, cfg) {
-    const bestRange = findBestRange(candles, periodCfg, cfg);
-    if (!bestRange) {
-      return { symbol: symbolInfo.symbol, result: 'NO_RANGE', period: periodKey };
-    }
-
-    const currentPrice = symbolInfo.lastPrice;
-    const atr = calcAtr(candles, 14);
-    const minPctBuffer = bestRange.rangeHigh * (cfg.minBreakoutBufferPct / 100);
-    const atrBuffer = Number.isFinite(atr) ? atr * cfg.atrBreakoutMultiplier : 0;
-    const breakoutBuffer = Math.max(minPctBuffer, atrBuffer);
-    const breakoutLevel = bestRange.rangeHigh + breakoutBuffer;
-
-    const rangeWidthAbs = bestRange.rangeHigh - bestRange.rangeLow;
-    const chaseAbs = Math.min(
-      bestRange.rangeHigh * (cfg.maxChasePct / 100),
-      Number.isFinite(atr) ? atr * cfg.maxChaseAtr : Infinity,
-      rangeWidthAbs * cfg.maxChaseRangeRatio
-    );
-    const maxSelectPrice = bestRange.rangeHigh + chaseAbs;
-
-    const signalCandles = candles.slice(-periodCfg.signalBars);
-    const closedBreakoutCandle = signalCandles.find(c => c.close >= breakoutLevel);
-    const wickBreakoutCandle = signalCandles.find(c => c.high >= breakoutLevel);
-
-    const breakoutNow = currentPrice >= breakoutLevel;
-    const tooLate = currentPrice > maxSelectPrice;
-    const hasRecentBreakoutEvidence = Boolean(closedBreakoutCandle || wickBreakoutCandle || breakoutNow);
-
-    let result = 'WAIT';
-    let reason = 'Price has not confirmed the upper range break yet.';
-
-    if (breakoutNow && hasRecentBreakoutEvidence && !tooLate) {
-      result = 'SELECT';
-      reason = 'Fresh upper-range breakout; price is still inside the no-chase zone.';
-    } else if (tooLate) {
-      result = 'LATE';
-      reason = 'Breakout exists but price is already too far above the range.';
-    } else if (currentPrice >= bestRange.rangeHigh) {
-      result = 'BREAKOUT_ATTEMPT';
-      reason = 'Price is above RangeHigh but dynamic breakout buffer is not fully cleared.';
-    } else {
-      const distancePct = pctChange(currentPrice, bestRange.rangeHigh);
-      if (Number.isFinite(distancePct) && distancePct <= 2.0) {
-        result = 'NEAR_BREAKOUT';
-        reason = 'Price is close to RangeHigh and can be watched for a fresh break.';
-      }
-    }
-
-    const volumeRatio = calcVolumeRatio(candles, periodCfg.signalBars, cfg.volumeLookbackBars);
-    const breakoutPctAboveRangeHigh = pctChange(bestRange.rangeHigh, currentPrice);
-
-    return {
-      symbol: symbolInfo.symbol,
-      result,
-      period: periodKey,
-      interval: periodCfg.interval,
-      currentPrice,
-      rangeLow: bestRange.rangeLow,
-      rangeHigh: bestRange.rangeHigh,
-      rangeWidthPct: bestRange.rangeWidthPct,
-      rangeSlopePct: bestRange.slopePct,
-      rangeBars: bestRange.bars,
-      rangeStartTime: bestRange.startTime,
-      rangeEndTime: bestRange.endTime,
-      rangeScore: bestRange.score,
-      highTouches: bestRange.highTouches,
-      lowTouches: bestRange.lowTouches,
-      atr,
-      breakoutBuffer,
-      breakoutLevel,
-      maxSelectPrice,
+      rangeSlopePct: null,
+      rangeScore: null,
+      rangeBars: REFERENCE_BARS,
+      rangeStartTime: previous4[0].openTime,
+      rangeEndTime: previous4[REFERENCE_BARS - 1].closeTime,
+      highTouches: null,
+      lowTouches: null,
+      breakoutLevel: rangeHigh,
+      breakoutBuffer: 0,
+      maxSelectPrice: null,
       breakoutPctAboveRangeHigh,
-      breakoutTime: closedBreakoutCandle?.closeTime || wickBreakoutCandle?.closeTime || null,
-      volumeRatio,
+      breakoutTime: crossedUp ? signalCandle.closeTime : null,
+      priceAboveRange,
+      crossedUp,
       quoteVolume24h: symbolInfo.quoteVolume24h,
-      priceChangePct24h: symbolInfo.priceChangePct24h,
-      reason
+      priceChangePct24h: symbolInfo.priceChangePct24h
     };
   }
 
-  async function getKlines(symbol, periodCfg, signal) {
-    const params = new URLSearchParams({
-      symbol,
-      interval: periodCfg.interval,
-      limit: String(periodCfg.limit)
-    });
-    const raw = await fetchJson(`${API_BASE}/fapi/v1/klines?${params.toString()}`, signal);
-    return parseKlines(raw);
+  async function getKlines(symbol, signal) {
+    const params = new URLSearchParams({symbol, interval: '1m', limit: String(PERIODS['1H'].limit)});
+    return parseKlines(await fetchJson(`${API_BASE}/fapi/v1/klines?${params}`, signal));
   }
 
-  async function mapWithConcurrency(items, concurrency, worker, signal, pauseMs) {
+  function sleep(ms, signal) {
+    if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+    if (ms <= 0) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', cancel);
+        resolve();
+      }, ms);
+      function cancel() {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
+        reject(new DOMException('Aborted', 'AbortError'));
+      }
+      signal?.addEventListener('abort', cancel, { once: true });
+    });
+  }
+
+  async function mapWithConcurrency(items, count, worker, signal, pauseMs) {
     const results = new Array(items.length);
     let cursor = 0;
-
     async function runner() {
       while (true) {
-        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-        const i = cursor++;
-        if (i >= items.length) return;
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const index = cursor++;
+        if (index >= items.length) return;
         try {
-          results[i] = await worker(items[i], i);
+          results[index] = await worker(items[index], index);
         } catch (err) {
           if (err?.name === 'AbortError') throw err;
-          results[i] = { error: err, item: items[i] };
+          results[index] = { error: err, item: items[index] };
         }
-        if (pauseMs > 0) await sleep(pauseMs);
+        await sleep(pauseMs, signal);
       }
     }
-
-    const workers = Array.from({ length: Math.max(1, concurrency) }, () => runner());
+    const workers = Array.from({length: Math.min(items.length, clamp(Math.trunc(count) || 5, 1, 12))}, runner);
     await Promise.all(workers);
     return results;
   }
 
-  function normalizePeriod(period) {
-    const p = String(period || '').trim().toUpperCase();
-    if (PERIODS[p]) return p;
-
-    const aliases = {
-      '2MONTHS': '2M', '2MONTH': '2M', '60D': '2M',
-      '1MONTH': '1M', '30D': '1M',
-      '1WEEK': '1W', '7D': '1W',
-      '3DAYS': '3D',
-      '1DAY': '1D', '24H': '1D',
-      '8HOURS': '8H',
-      '4HOURS': '4H',
-      '1HOUR': '1H', '1HOURS': '1H', '60MIN': '1H', '60MINUTES': '1H',
-      '15MIN': '15M', '15MINUTES': '15M',
-      '5MIN': '5M', '5MINUTES': '5M'
-    };
-    return aliases[p] || null;
-  }
-
   async function scan(options = {}) {
-    const periodKey = normalizePeriod(options.period || options.rangePeriod || '1M');
-    if (!periodKey) {
-      throw new Error(`Invalid period. Use one of: ${Object.keys(PERIODS).join(', ')}`);
-    }
-
+    // options.period ve options.rangePeriod KULLANILMAZ: 5x1m sabittir.
+    const periodKey = '1H'; // UI uyumluluk anahtari, analiz 5m.
     if (activeController) activeController.abort();
-    activeController = new AbortController();
-
+    const controller = new AbortController();
+    activeController = controller;
+    const signal = controller.signal;
     const externalSignal = options.signal;
+    const forwardAbort = () => controller.abort();
     if (externalSignal) {
-      if (externalSignal.aborted) activeController.abort();
-      else externalSignal.addEventListener('abort', () => activeController.abort(), { once: true });
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener('abort', forwardAbort, {once: true});
     }
 
-    const signal = activeController.signal;
-    const periodCfg = PERIODS[periodKey];
-    const cfg = { ...DEFAULT_CONFIG, ...(options.config || {}) };
+    const cfg = {...DEFAULT_CONFIG, ...(options.config || {})};
+    // Eski UI'den gelen config esikleri 5/4 mum, fiyat +%3, hacim 2.5x'i DEGISTIREMEZ.
+    cfg.priceAverageBars = REFERENCE_BARS;
+    cfg.volumeLookbackBars = REFERENCE_BARS;
+    cfg.requiredPriceGainPct = REQUIRED_PRICE_GAIN_PCT;
+    cfg.minVolumeIncreasePct = REQUIRED_VOLUME_INCREASE_PCT;
+    cfg.volumeMetric = 'volume';
     const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
-
     const startedAt = Date.now();
-    onProgress({ phase: 'universe', done: 0, total: 0, period: periodKey });
 
-    let universe = await getUniverse(signal);
-
-    if (Array.isArray(options.symbols) && options.symbols.length) {
-      const allow = new Set(options.symbols.map(s => String(s).trim().toUpperCase()));
-      universe = universe.filter(x => allow.has(x.symbol));
-    }
-
-    const candidates = prefilterUniverse(universe, cfg);
-    onProgress({ phase: 'scan', done: 0, total: candidates.length, period: periodKey });
-
-    let done = 0;
-    const rawResults = await mapWithConcurrency(
-      candidates,
-      cfg.concurrency,
-      async (symbolInfo) => {
-        const candles = await getKlines(symbolInfo.symbol, periodCfg, signal);
-        const evaluated = evaluateBreakout(symbolInfo, candles, periodKey, periodCfg, cfg);
-        done++;
-        onProgress({
-          phase: 'scan',
-          done,
-          total: candidates.length,
-          period: periodKey,
-          symbol: symbolInfo.symbol,
-          lastResult: evaluated.result
-        });
-        return evaluated;
-      },
-      signal,
-      cfg.requestPauseMs
-    );
-
-    const errors = [];
-    const evaluated = [];
-    for (const r of rawResults) {
-      if (!r) continue;
-      if (r.error) {
-        errors.push({ symbol: r.item?.symbol, message: r.error?.message || String(r.error) });
-      } else {
-        evaluated.push(r);
-      }
-    }
-
-    const selects = evaluated
-      .filter(x => x.result === 'SELECT')
-      .sort((a, b) => {
-        // En yeni / en erken breakout öne: RangeHigh üzerinde daha az uzaklaşmış olan önce.
-        const ad = Math.abs(a.breakoutPctAboveRangeHigh ?? Infinity);
-        const bd = Math.abs(b.breakoutPctAboveRangeHigh ?? Infinity);
-        if (ad !== bd) return ad - bd;
-        return (b.rangeScore || 0) - (a.rangeScore || 0);
-      });
-
-    const near = evaluated
-      .filter(x => x.result === 'NEAR_BREAKOUT' || x.result === 'BREAKOUT_ATTEMPT')
-      .sort((a, b) => (b.rangeScore || 0) - (a.rangeScore || 0));
-
-    const summary = {
-      period: periodKey,
-      periodLabel: periodCfg.label,
-      interval: periodCfg.interval,
-      scanned: candidates.length,
-      selectCount: selects.length,
-      nearCount: near.length,
-      errorCount: errors.length,
-      elapsedMs: Date.now() - startedAt,
-      selects,
-      near,
-      all: evaluated,
-      errors,
-      config: cfg
-    };
-
-    onProgress({
-      phase: 'done',
-      done: candidates.length,
-      total: candidates.length,
-      period: periodKey,
-      selectCount: selects.length
-    });
-
-    // index.html isterse event ile de dinleyebilir.
     try {
-      global.dispatchEvent(new CustomEvent('rangebreakout:results', { detail: summary }));
-    } catch (_) {
-      // CustomEvent desteklenmiyorsa scan() return değeri yeterlidir.
-    }
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      onProgress({phase: 'universe', done: 0, total: 0, period: periodKey});
+      let universe = await getUniverse(signal);
+      if (Array.isArray(options.symbols) && options.symbols.length) {
+        const allowed = new Set(options.symbols.map(s => String(s).trim().toUpperCase()));
+        universe = universe.filter(x => allowed.has(x.symbol));
+      }
+      const candidates = prefilterUniverse(universe, cfg);
+      onProgress({phase: 'scan', done: 0, total: candidates.length, period: periodKey});
+      let done = 0;
+      const rawResults = await mapWithConcurrency(
+        candidates,
+        cfg.concurrency,
+        async symbolInfo => {
+          try {
+            return evaluateBreakout(symbolInfo, await getKlines(symbolInfo.symbol, signal));
+          } finally {
+            done++;
+            if (!signal.aborted) {
+              onProgress({phase: 'scan', done, total: candidates.length,
+                period: periodKey, symbol: symbolInfo.symbol});
+            }
+          }
+        },
+        signal,
+        Math.max(0, Number(cfg.requestPauseMs) || 0)
+      );
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      const errors = [];
+      const evaluated = [];
+      for (const row of rawResults) {
+        if (!row) continue;
+        if (row.error) errors.push({symbol: row.item?.symbol, message: row.error?.message || String(row.error)});
+        else evaluated.push(row);
+      }
 
-    return summary;
+      // Onceki surumdeki siralama: az hacim artisi ONDE (2.5x, 2.6x, 3x ...).
+      const selects = evaluated.filter(x => x.result === 'SELECT')
+        .sort((a, b) => a.volumeRatio - b.volumeRatio || a.symbol.localeCompare(b.symbol));
+      const near = evaluated.filter(x => x.result === 'VOLUME_LOW' || x.result === 'PRICE_GAP_LOW')
+        .sort((a, b) => b.priceIncreasePct - a.priceIncreasePct);
+      const summary = {
+        period: periodKey,
+        periodLabel: PERIODS['1H'].label,
+        interval: '1m',
+        scanned: candidates.length,
+        selectCount: selects.length,
+        nearCount: near.length,
+        errorCount: errors.length,
+        elapsedMs: Date.now() - startedAt,
+        selects, near, all: evaluated, errors,
+        config: cfg
+      };
+      onProgress({phase: 'done', done: candidates.length, total: candidates.length,
+        period: periodKey, selectCount: selects.length});
+      try {
+        global.dispatchEvent(new CustomEvent('rangebreakout:results', {detail: summary}));
+      } catch (_) {
+        // CustomEvent yoksa scan() sonucu kullanilir.
+      }
+      return summary;
+    } finally {
+      externalSignal?.removeEventListener('abort', forwardAbort);
+      if (activeController === controller) activeController = null;
+    }
   }
 
   function stop() {
@@ -579,12 +406,5 @@
     return JSON.parse(JSON.stringify(PERIODS));
   }
 
-  global.RangeBreakoutScan = Object.freeze({
-    scan,
-    stop,
-    getPeriods,
-    PERIODS,
-    DEFAULT_CONFIG
-  });
-
+  global.RangeBreakoutScan = Object.freeze({scan, stop, getPeriods, PERIODS, DEFAULT_CONFIG});
 })(window);

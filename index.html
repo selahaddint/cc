@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- UI Version: 14.48 — Auto grid event/render fix -->
+<!-- UI Version: 14.49 — FROZEN90 browser-only line scanners and chart -->
 <html lang="tr">
 <head>
 <meta charset="utf-8">
@@ -224,6 +224,30 @@ body{padding-top:54px;padding-bottom:24px}
 .reportEmpty{padding:18px!important;color:var(--muted);text-align:center}
 @media(max-width:600px){.reportModal{padding:8px}.reportModalPanel{max-height:94vh}.reportModalBody{padding:10px}.reportTableWrap{max-height:75vh}}
 
+
+/* Independent FROZEN90 browser visualization. Does not alter existing scanner styles. */
+.frozenScanButton{border-color:#547aa3;background:#163354;color:#d6e9ff}
+.frozenScanButton:hover{background:#264d77}
+.frozenLineChart[hidden]{display:none!important}
+.frozenLineChart{margin-top:12px;scroll-margin-top:15px}
+.frozenLineHeader{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.frozenLineHeader h2{margin:0}
+.frozenLineControls{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.frozenLineControls button{min-height:38px;padding:8px 12px}
+.frozenLineControls button[aria-pressed="true"]{background:#2859a0;border-color:#78aaff;color:#fff}
+.frozenLineClose{color:#fda4af}
+.frozenLineStatus{color:#bacce1;font-size:12px;line-height:1.5;margin:12px 0}
+.frozenGraphicWrap{border:1px solid #29405a;border-radius:11px;overflow:auto;background:#0b1626}
+.frozenCandleSvg{display:block;min-width:750px;width:100%;height:auto}
+.frozenLevelGrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-top:10px}
+.frozenLevelItem{border:1px solid #2a3c51;background:#112238;border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.frozenLevelItem span{font-size:10px;letter-spacing:.5px;font-weight:800}
+.frozenLevelItem strong{font-size:12px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.frozenLevelItem.buy span{color:#4ade80}.frozenLevelItem.sell span{color:#fbbf24}
+.frozenChartEmpty{padding:15px;font-size:12px;color:#ffd36d}
+.frozenChartNote{font-size:11px;color:#93a4bc;line-height:1.5;margin:9px 0 0}
+@media(max-width:850px){.frozenLevelGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:460px){.frozenLevelGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body class="authLocked">
@@ -269,7 +293,7 @@ body{padding-top:54px;padding-bottom:24px}
         <div class="field"><label>MinY%</label><input id="minIncrease" type="number" min="0.01" max="100" step="0.01" value="0.40"></div>
         <div class="field"><label>MaxY%</label><input id="maxIncrease" type="number" min="0.01" max="100" step="0.01" value="3.00"></div>
       </div>
-      <div class="toolbar"><button id="startBtn" class="primary" type="button" title="Ana taramayı mevcut Sec., MinY% ve MaxY% ayarlarıyla başlatır">Start Scan</button><button id="startScan153Btn" type="button" title="StartScan kurallarını 15m ana trend, 5m setup ve 3m confirmation ile çalıştırır">15m-5m-3m Scan</button><button id="auto15m5m3mScanBtn" type="button" title="Hybrid REST + WebSocket Auto15m5m3m entry engine. SELECT sonrası AutoWatch giriş zamanını bekler; GREEN olunca Follow otomatik başlar.">Auto15m5m3m Scan</button><button id="startScan531Btn" type="button" title="StartScan kurallarını 5m ana trend, 3m setup ve 1m confirmation ile çalıştırır">5m-3m-1m Scan</button><button id="auto5m3m1mScanBtn" type="button" title="Hybrid REST + WebSocket Auto5m3m1m entry engine. SELECT sonrası AutoWatch giriş zamanını bekler; GREEN olunca Follow otomatik başlar.">Auto5m3m1m Scan</button><button id="auto3m1mScanBtn" type="button" title="Hybrid REST + WebSocket Auto3m1m entry engine. SELECT sonrası AutoWatch giriş zamanını bekler; GREEN olunca Follow otomatik başlar.">Auto3m1m Scan</button><button id="last2Green1mScanBtn" type="button" title="Sadece kapanmış son iki 1 dakikalık mumun ikisi de yeşilse SELECT üretir; başka seçim şartı uygulamaz">2×1m Green</button><button id="startShortBtn" type="button" title="SHORT yönlü 4h–5m yapı ve giriş koşullarını tarar">StartScanForShort</button><button id="lowestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında düşen coinleri tarar">LowerScan</button><button id="volumeIncreaseScanBtn" type="button" title="Son X saniyenin hacmini önceki X saniyeyle karşılaştıran hacim artışı taramasını açar ve başlatır">Volume Increase Scan</button><button id="highestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında yükselen coinleri tarar">HighestScan</button><button id="oneMScanBtn" type="button" title="OneM Scan algoritmasıyla erken LONG adaylarını ve giriş uygunluğunu tarar">OneM Scan</button><button id="bookScanBtn" type="button" title="Kitap/Blueprint kurallarıyla erken LONG setup ve giriş uygunluğunu tarar">Book Scan</button><button id="coinScanBtn" type="button" title="Blueprint V2 kurallarıyla LONG adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScan</button><button id="coinScanForShortBtn" type="button" title="Blueprint V2 kurallarıyla SHORT adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScanForShort</button><div class="rangeScanControl"><select id="rangePeriod" aria-label="Range tarama dönemi" title="Geçmişteki gezinme/range yapısının inceleneceği dönem"><option value="2M">2 Ay</option><option value="1M" selected>1 Ay</option><option value="1W">1 Hafta</option><option value="3D">3 Gün</option><option value="1D">1 Gün</option><option value="8H">8 Saat</option><option value="4H">4 Saat</option><option value="1H">1 Saat</option><option value="15M">15 Dakika</option><option value="5M">5 Dakika</option></select></div><button id="rangeBreakoutScanBtn" type="button" title="Seçilen dönemdeki yatay/range bölgesini bulur; taze üst kırılım oluşursa SELECT üretir">Range Scan</button><div class="squeezeScanControl"><select id="squeezeTimeframe" aria-label="Squeeze Long zaman dilimi" title="EMA200 + Squeeze Momentum + MACD LONG taramasının mum zaman dilimi"><option value="1m">1 Dakika</option><option value="3m">3 Dakika</option><option value="5m" selected>5 Dakika</option><option value="15m">15 Dakika</option><option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="2h">2 Saat</option><option value="4h">4 Saat</option></select></div><button id="squeezeLongScanBtn" type="button" title="AllowedCoins listesindeki tüm coinleri seçili zaman diliminde EMA200, Squeeze Momentum ve MACD ile tarar">Squeeze Long</button><button id="longEntryConfirmBtn" type="button" title="AllowedCoins listesindeki tüm coinleri 4H, 15m BOS, likidite süpürmesi, FVG/Fib ve R/R koşullarıyla tarar">Long Confirm</button><button id="watchBtn" type="button" title="Griddeki SELECT coinleri LONG giriş zamanlaması için izlemeye başlar">Watch</button><button id="reportBtn" type="button" title="Tarama geçmişi raporunu açar">Report</button><button id="followReportBtn" type="button" title="Follow işlem geçmişi raporunu açar">FollowReport</button><label class="autoScanToggle" for="autoScan" title="İşaretliyken scan tamamlandıktan 2 dakika sonra yeni scan otomatik başlar."><input id="autoScan" type="checkbox"><span>Auto 2m</span><span id="autoScanCountdown" class="autoScanCountdown">—</span></label><button id="cancelBtn" class="danger" type="button" title="Devam eden tarama işlemini iptal eder" disabled>Cancel</button><button id="refreshRankBtn" class="toolbarHidden" type="button" title="Activity Rank önbelleğini yeniler" aria-hidden="true" tabindex="-1">Refresh Activity Rank</button><button id="clearEventsBtn" class="toolbarHidden" type="button" title="Fast Event Watch kayıtlarını temizler" aria-hidden="true" tabindex="-1">Clear Event Watch</button><button id="csvBtn" class="toolbarHidden" type="button" title="Tarama adaylarını CSV dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Candidate CSV</button><button id="jsonBtn" class="toolbarHidden" type="button" title="Tarama sonuçlarını JSON dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Scan JSON</button></div>
+      <div class="toolbar"><button id="startBtn" class="primary" type="button" title="Ana taramayı mevcut Sec., MinY% ve MaxY% ayarlarıyla başlatır">Start Scan</button><button id="frozen4h1hScanBtn" class="frozenScanButton" type="button" title="90 kapanmış 4H mum / 1H HH-LH FROZEN90 SELECT taraması; yalnızca görüntüleme">4H–1H Line Scan</button><button id="frozen1h15mScanBtn" class="frozenScanButton" type="button" title="90 kapanmış 1H mum / 15m HH-LH FROZEN90 SELECT taraması; yalnızca görüntüleme">1H–15m Line Scan</button><button id="frozen15m5mScanBtn" class="frozenScanButton" type="button" title="90 kapanmış 15m mum / 5m HH-LH FROZEN90 SELECT taraması; yalnızca görüntüleme">15m–5m Line Scan</button><button id="startScan153Btn" type="button" title="StartScan kurallarını 15m ana trend, 5m setup ve 3m confirmation ile çalıştırır">15m-5m-3m Scan</button><button id="auto15m5m3mScanBtn" type="button" title="Hybrid REST + WebSocket Auto15m5m3m entry engine. SELECT sonrası AutoWatch giriş zamanını bekler; GREEN olunca Follow otomatik başlar.">Auto15m5m3m Scan</button><button id="startScan531Btn" type="button" title="StartScan kurallarını 5m ana trend, 3m setup ve 1m confirmation ile çalıştırır">5m-3m-1m Scan</button><button id="auto5m3m1mScanBtn" type="button" title="Hybrid REST + WebSocket Auto5m3m1m entry engine. SELECT sonrası AutoWatch giriş zamanını bekler; GREEN olunca Follow otomatik başlar.">Auto5m3m1m Scan</button><button id="auto3m1mScanBtn" type="button" title="Hybrid REST + WebSocket Auto3m1m entry engine. SELECT sonrası AutoWatch giriş zamanını bekler; GREEN olunca Follow otomatik başlar.">Auto3m1m Scan</button><button id="last2Green1mScanBtn" type="button" title="Sadece kapanmış son iki 1 dakikalık mumun ikisi de yeşilse SELECT üretir; başka seçim şartı uygulamaz">2×1m Green</button><button id="startShortBtn" type="button" title="SHORT yönlü 4h–5m yapı ve giriş koşullarını tarar">StartScanForShort</button><button id="lowestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında düşen coinleri tarar">LowerScan</button><button id="volumeIncreaseScanBtn" type="button" title="Son X saniyenin hacmini önceki X saniyeyle karşılaştıran hacim artışı taramasını açar ve başlatır">Volume Increase Scan</button><button id="highestScanBtn" type="button" title="Sec. saniye önceki fiyata göre MinY%–MaxY% aralığında yükselen coinleri tarar">HighestScan</button><button id="oneMScanBtn" type="button" title="OneM Scan algoritmasıyla erken LONG adaylarını ve giriş uygunluğunu tarar">OneM Scan</button><button id="bookScanBtn" type="button" title="Kitap/Blueprint kurallarıyla erken LONG setup ve giriş uygunluğunu tarar">Book Scan</button><button id="coinScanBtn" type="button" title="Blueprint V2 kurallarıyla LONG adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScan</button><button id="coinScanForShortBtn" type="button" title="Blueprint V2 kurallarıyla SHORT adaylarını tarar ve SELECT/CAUTION sonucu üretir">CoinScanForShort</button><div class="rangeScanControl"><select id="rangePeriod" aria-label="Range tarama dönemi" title="Geçmişteki gezinme/range yapısının inceleneceği dönem"><option value="2M">2 Ay</option><option value="1M" selected>1 Ay</option><option value="1W">1 Hafta</option><option value="3D">3 Gün</option><option value="1D">1 Gün</option><option value="8H">8 Saat</option><option value="4H">4 Saat</option><option value="1H">1 Saat</option><option value="15M">15 Dakika</option><option value="5M">5 Dakika</option></select></div><button id="rangeBreakoutScanBtn" type="button" title="Seçilen dönemdeki yatay/range bölgesini bulur; taze üst kırılım oluşursa SELECT üretir">Range Scan</button><div class="squeezeScanControl"><select id="squeezeTimeframe" aria-label="Squeeze Long zaman dilimi" title="EMA200 + Squeeze Momentum + MACD LONG taramasının mum zaman dilimi"><option value="1m">1 Dakika</option><option value="3m">3 Dakika</option><option value="5m" selected>5 Dakika</option><option value="15m">15 Dakika</option><option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="2h">2 Saat</option><option value="4h">4 Saat</option></select></div><button id="squeezeLongScanBtn" type="button" title="AllowedCoins listesindeki tüm coinleri seçili zaman diliminde EMA200, Squeeze Momentum ve MACD ile tarar">Squeeze Long</button><button id="longEntryConfirmBtn" type="button" title="AllowedCoins listesindeki tüm coinleri 4H, 15m BOS, likidite süpürmesi, FVG/Fib ve R/R koşullarıyla tarar">Long Confirm</button><button id="watchBtn" type="button" title="Griddeki SELECT coinleri LONG giriş zamanlaması için izlemeye başlar">Watch</button><button id="reportBtn" type="button" title="Tarama geçmişi raporunu açar">Report</button><button id="followReportBtn" type="button" title="Follow işlem geçmişi raporunu açar">FollowReport</button><label class="autoScanToggle" for="autoScan" title="İşaretliyken scan tamamlandıktan 2 dakika sonra yeni scan otomatik başlar."><input id="autoScan" type="checkbox"><span>Auto 2m</span><span id="autoScanCountdown" class="autoScanCountdown">—</span></label><button id="cancelBtn" class="danger" type="button" title="Devam eden tarama işlemini iptal eder" disabled>Cancel</button><button id="refreshRankBtn" class="toolbarHidden" type="button" title="Activity Rank önbelleğini yeniler" aria-hidden="true" tabindex="-1">Refresh Activity Rank</button><button id="clearEventsBtn" class="toolbarHidden" type="button" title="Fast Event Watch kayıtlarını temizler" aria-hidden="true" tabindex="-1">Clear Event Watch</button><button id="csvBtn" class="toolbarHidden" type="button" title="Tarama adaylarını CSV dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Candidate CSV</button><button id="jsonBtn" class="toolbarHidden" type="button" title="Tarama sonuçlarını JSON dosyası olarak dışa aktarır" disabled aria-hidden="true" tabindex="-1">Scan JSON</button></div>
       <div class="status" id="mainStatus">Hazır. Start Scan ile tarama başlayacak.</div>
       <div id="auto3m1mDiagPanel" class="autoDiagPanel" hidden>
         <div class="autoDiagHead">
@@ -300,6 +324,22 @@ body{padding-top:54px;padding-bottom:24px}
           <tbody id="candidateBody"><tr><td colspan="16" class="empty">Henüz scan yapılmadı.</td></tr></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card full frozenLineChart" id="frozenLineChart" hidden aria-label="FROZEN90 mum grafiği">
+      <div class="frozenLineHeader">
+        <h2 id="frozenLineChartTitle">FROZEN90 · Coin grafiği</h2>
+        <div class="frozenLineControls" role="group" aria-label="Çizgi stratejisi seçimi">
+          <button type="button" data-frozen-tab="4h1h" aria-pressed="true">4H</button>
+          <button type="button" data-frozen-tab="1h15m" aria-pressed="false">1H</button>
+          <button type="button" data-frozen-tab="15m5m" aria-pressed="false">15m</button>
+          <button id="frozenCloseChartBtn" class="frozenLineClose" type="button" title="Grafiği kapat">×</button>
+        </div>
+      </div>
+      <div class="frozenLineStatus" id="frozenLineChartStatus" role="status">SELECT satırındaki coin adına tıkla.</div>
+      <div id="frozenLineChartGraphic" class="frozenGraphicWrap"></div>
+      <div id="frozenLineChartLevels" class="frozenLevelGrid"></div>
+      <p class="frozenChartNote">Grafik Binance Futures kapanmış mumlarıyla tarayıcıda hesaplanır. BUY1/BUY2 yeşil, SELL1–SELL4 sarı; çizgiler onaylanmış HH/LH noktalarından gelir. Watch ve Follow çalıştırılmaz. Mevcut C# SELECT anı ile bugünkü çizgiler zamanla farklılaşabilir.</p>
     </section>
 
     <section class="card visuallyHiddenSupport" aria-hidden="true">
@@ -2471,12 +2511,15 @@ body{padding-top:54px;padding-bottom:24px}
   body.addEventListener('click',e=>{
     const pill=e.target.closest('.pill.select,.pill.caution');
     if(!pill || !body.contains(pill)) return;
+    // SELECT now opens the independent FROZEN90 chart; CAUTION retains Result Detail.
+    if (pill.classList.contains('select') && window.FrozenLineBrowser) return;
     const tr=pill.closest('tr[data-symbol]');if(!tr)return;
     openResult(tr,pill.textContent.trim());
   },true);
   body.addEventListener('keydown',e=>{
     if(e.key!=='Enter'&&e.key!==' ')return;
     const pill=e.target.closest('.pill.select,.pill.caution');if(!pill)return;
+    if (pill.classList.contains('select') && window.FrozenLineBrowser) return;
     e.preventDefault();
     const tr=pill.closest('tr[data-symbol]');if(tr)openResult(tr,pill.textContent.trim());
   });
@@ -2559,5 +2602,10 @@ body{padding-top:54px;padding-bottom:24px}
 <footer class="appBottomBar">Not investment advice.</footer>
 
 
+<script src="js/FrozenLineCore.js?v=1.0"></script>
+<script src="js/FrozenLineBrowser.js?v=1.0"></script>
+<script src="js/Auto4h1hLineScan.js?v=1.0"></script>
+<script src="js/Auto1h15mLineScan.js?v=1.0"></script>
+<script src="js/Auto15m5mLineScan.js?v=1.0"></script>
 </body>
 </html>
